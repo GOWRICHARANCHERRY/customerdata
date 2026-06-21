@@ -450,22 +450,30 @@
     </div>
 
     <script>
-        // Configuration
-        const MASTER_CREDENTIALS = {
-            username: 'gowricharan',
-            password: '@8978523646ddD'
-        };
+        const API_BASE = 'http://localhost:3001/api';
 
-        // In-memory storage (in a real app, this would be a database)
-        let users = JSON.parse(localStorage.getItem('users')) || {};
-        let pendingSignups = JSON.parse(localStorage.getItem('pendingSignups')) || {};
-        let passwordResetRequests = JSON.parse(localStorage.getItem('passwordResetRequests')) || {};
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+            };
+        }
 
-        // Initialize the application
+        function handleResponse(res) {
+            if (res.status === 401 || res.status === 403) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('currentUser');
+                showLoginForm();
+                throw new Error('Session expired. Please login again.');
+            }
+            return res.json();
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
-            // Check if user is already logged in
             const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-            if (currentUser) {
+            const token = localStorage.getItem('token');
+            if (currentUser && token) {
                 if (currentUser.role === 'admin') {
                     showAdminDashboard();
                 } else {
@@ -473,153 +481,124 @@
                 }
                 return;
             }
-
-            // Form event listeners
             document.getElementById('loginFormElement').addEventListener('submit', handleLogin);
             document.getElementById('signupFormElement').addEventListener('submit', handleSignup);
             document.getElementById('forgotPasswordFormElement').addEventListener('submit', handleForgotPassword);
         });
 
-        // Handle login
-        function handleLogin(e) {
+        async function handleLogin(e) {
             e.preventDefault();
-
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
 
-            // Check master credentials
-            if (username === MASTER_CREDENTIALS.username && password === MASTER_CREDENTIALS.password) {
-                const currentUser = { username: username, role: 'admin' };
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                showMessage('loginMessage', 'Login successful! Welcome, Admin.', 'success');
-                setTimeout(() => {
-                    showAdminDashboard();
-                }, 1000);
-                return;
-            }
+            try {
+                const res = await fetch(API_BASE + '/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
 
-            // Check regular users
-            if (users[username] && users[username].password === password) {
-                if (users[username].approved) {
-                    const currentUser = { username: username, role: 'user' };
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    showMessage('loginMessage', 'Login successful! Redirecting to calculator...', 'success');
-                    setTimeout(() => {
-                        window.location.href = "simple13.html";
-                    }, 1000);
-                } else {
-                    showMessage('loginMessage', 'Your account is pending approval. Please wait for admin confirmation.', 'warning');
+                if (!res.ok) {
+                    if (data.pending) {
+                        showMessage('loginMessage', 'Your account is pending approval. Please wait for admin confirmation.', 'warning');
+                    } else {
+                        showMessage('loginMessage', data.error || 'Invalid username or password.', 'error');
+                    }
+                    document.getElementById('loginFormElement').reset();
+                    return;
                 }
-            } else {
-                showMessage('loginMessage', 'Invalid username or password.', 'error');
+
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('currentUser', JSON.stringify(data.user));
+                showMessage('loginMessage', 'Login successful!', 'success');
+
+                setTimeout(() => {
+                    if (data.user.role === 'admin') {
+                        showAdminDashboard();
+                    } else {
+                        window.location.href = 'simple13.html';
+                    }
+                }, 1000);
+            } catch (err) {
+                showMessage('loginMessage', 'Connection error. Is the server running?', 'error');
             }
 
-            // Clear form
             document.getElementById('loginFormElement').reset();
         }
 
-        // Handle signup
-        function handleSignup(e) {
+        async function handleSignup(e) {
             e.preventDefault();
-
             const username = document.getElementById('signupUsername').value.trim();
             const password = document.getElementById('signupPassword').value;
             const confirmPassword = document.getElementById('signupConfirmPassword').value;
 
-            // Validation
             if (password !== confirmPassword) {
                 showMessage('signupMessage', 'Passwords do not match.', 'error');
                 return;
             }
-
             if (password.length < 6) {
                 showMessage('signupMessage', 'Password must be at least 6 characters long.', 'error');
                 return;
             }
 
-            // Check if username already exists
-            if (users[username] || pendingSignups[username]) {
-                showMessage('signupMessage', 'Username already exists or is pending approval.', 'error');
-                return;
+            try {
+                const res = await fetch(API_BASE + '/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showMessage('signupMessage', data.error || 'Signup failed.', 'error');
+                    return;
+                }
+
+                showMessage('signupMessage', 'Account created successfully! Please wait for admin approval before you can access the Calculator and Data Entry system.', 'success');
+                document.getElementById('signupFormElement').reset();
+                setTimeout(() => showLoginForm(), 2000);
+            } catch (err) {
+                showMessage('signupMessage', 'Connection error. Is the server running?', 'error');
             }
-
-            // Check if it's the master username
-            if (username === MASTER_CREDENTIALS.username) {
-                showMessage('signupMessage', 'This username is reserved.', 'error');
-                return;
-            }
-
-            // Add to pending signups
-            pendingSignups[username] = {
-                username: username,
-                password: password,
-                timestamp: new Date().toISOString(),
-                approved: false,
-                dataEntryAccess: false
-            };
-
-            localStorage.setItem('pendingSignups', JSON.stringify(pendingSignups));
-
-            showMessage('signupMessage', 'Account created successfully! Please wait for admin approval before you can access the Calculator and Data Entry system.', 'success');
-
-            // Clear form
-            document.getElementById('signupFormElement').reset();
-
-            // Switch to login form after 2 seconds
-            setTimeout(() => showLoginForm(), 2000);
         }
 
-        // Handle forgot password
-        function handleForgotPassword(e) {
+        async function handleForgotPassword(e) {
             e.preventDefault();
-
             const username = document.getElementById('forgotUsername').value.trim();
             const newPassword = document.getElementById('forgotNewPassword').value;
             const confirmPassword = document.getElementById('forgotConfirmPassword').value;
 
-            // Validation
             if (newPassword !== confirmPassword) {
                 showMessage('forgotMessage', 'Passwords do not match.', 'error');
                 return;
             }
-
             if (newPassword.length < 6) {
                 showMessage('forgotMessage', 'Password must be at least 6 characters long.', 'error');
                 return;
             }
 
-            // Check if username exists in users or pending signups
-            if (!users[username] && !pendingSignups[username]) {
-                showMessage('forgotMessage', 'Username not found.', 'error');
-                return;
+            try {
+                const res = await fetch(API_BASE + '/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, newPassword })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showMessage('forgotMessage', data.error || 'Request failed.', 'error');
+                    return;
+                }
+
+                showMessage('forgotMessage', 'Password reset request submitted successfully! Please wait for admin approval.', 'success');
+                document.getElementById('forgotPasswordFormElement').reset();
+                setTimeout(() => showLoginForm(), 2000);
+            } catch (err) {
+                showMessage('forgotMessage', 'Connection error. Is the server running?', 'error');
             }
-
-            // Check if it's the master username
-            if (username === MASTER_CREDENTIALS.username) {
-                showMessage('forgotMessage', 'Cannot reset password for admin account.', 'error');
-                return;
-            }
-
-            // Add to password reset requests
-            passwordResetRequests[username] = {
-                username: username,
-                newPassword: newPassword,
-                timestamp: new Date().toISOString(),
-                status: 'pending'
-            };
-
-            localStorage.setItem('passwordResetRequests', JSON.stringify(passwordResetRequests));
-
-            showMessage('forgotMessage', 'Password reset request submitted successfully! Please wait for admin approval.', 'success');
-
-            // Clear form
-            document.getElementById('forgotPasswordFormElement').reset();
-
-            // Switch to login form after 2 seconds
-            setTimeout(() => showLoginForm(), 2000);
         }
 
-        // Admin Dashboard Functions
         function showAdminDashboard() {
             document.getElementById('mainContainer').classList.add('admin-container');
             hideAllForms();
@@ -633,240 +612,242 @@
             loadPasswordResetRequests();
         }
 
-        function loadExistingUsers() {
+        async function loadExistingUsers() {
             const container = document.getElementById('existingUsersContainer');
-            const userList = Object.values(users);
+            try {
+                const res = await fetch(API_BASE + '/auth/users', { headers: getAuthHeaders() });
+                if (!res.ok) { container.innerHTML = '<p>Failed to load users.</p>'; return; }
+                const userList = await handleResponse(res);
 
-            if (userList.length === 0) {
-                container.innerHTML = '<p>No users found.</p>';
-                return;
+                if (userList.length === 0) {
+                    container.innerHTML = '<p>No users found.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                userList.forEach(user => {
+                    const userCard = document.createElement('div');
+                    userCard.className = 'user-card';
+                    const dataEntryStatus = user.dataEntryAccess ? 'Yes' : 'No';
+                    const excelStatus = user.excelAccess ? 'Yes' : 'No';
+                    const auditStatus = user.auditAccess ? 'Yes' : 'No';
+                    const analyticsStatus = user.analyticsAccess ? 'Yes' : 'No';
+
+                    userCard.innerHTML = `
+                        <h4>👤 ${user.username}</h4>
+                        <p><strong>Status:</strong> ${user.approved ? '✅ Approved' : '⏳ Pending'}</p>
+                        <p><strong>Permissions:</strong></p>
+                        <ul>
+                            <li>Data Entry: ${dataEntryStatus}</li>
+                            <li>Excel Import/Export: ${excelStatus}</li>
+                            <li>Audit Logs: ${auditStatus}</li>
+                            <li>Analytics: ${analyticsStatus}</li>
+                        </ul>
+                        <div class="user-actions">
+                            ${!user.approved ? `<button class="btn btn-success btn-small" onclick="approveUser('${user.username}')">✅ Approve</button>` : ''}
+                            ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'dataEntryAccess')">${user.dataEntryAccess ? 'Revoke' : 'Grant'} Data Access</button>` : ''}
+                            ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'excelAccess')">${user.excelAccess ? 'Revoke' : 'Grant'} Excel Access</button>` : ''}
+                            ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'auditAccess')">${user.auditAccess ? 'Revoke' : 'Grant'} Audit Access</button>` : ''}
+                            ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'analyticsAccess')">${user.analyticsAccess ? 'Revoke' : 'Grant'} Analytics Access</button>` : ''}
+                            <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">🗑️ Delete</button>
+                        </div>
+                    `;
+                    container.appendChild(userCard);
+                });
+            } catch (err) {
+                container.innerHTML = '<p>Error loading users.</p>';
             }
-
-            container.innerHTML = '';
-            userList.forEach(user => {
-                const userCard = document.createElement('div');
-                userCard.className = 'user-card';
-                const dataAccessStatus = user.dataEntryAccess ? 'Yes' : 'No';
-                const excelAccessStatus = user.excelAccess ? 'Yes' : 'No';
-                const auditAccessStatus = user.auditAccess ? 'Yes' : 'No';
-                const analyticsAccessStatus = user.analyticsAccess ? 'Yes' : 'No';
-
-                userCard.innerHTML = `
-                    <h4>👤 ${user.username}</h4>
-                    <div class="password-field">Password: ${user.password}</div>
-                    <p><strong>Status:</strong> ${user.approved ? '✅ Approved' : '⏳ Pending'}</p>
-                    <p><strong>Permissions:</strong></p>
-                    <ul>
-                        <li>Data Entry: ${dataAccessStatus}</li>
-                        <li>Excel Import/Export: ${excelAccessStatus}</li>
-                        <li>Audit Logs: ${auditAccessStatus}</li>
-                        <li>Analytics: ${analyticsAccessStatus}</li>
-                    </ul>
-                    <div class="user-actions">
-                        ${!user.approved ? `<button class="btn btn-success btn-small" onclick="approveUser('${user.username}')">✅ Approve</button>` : ''}
-                        ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleDataAccess('${user.username}')">${user.dataEntryAccess ? 'Revoke' : 'Grant'} Data Access</button>` : ''}
-                        ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleExcelAccess('${user.username}')">${user.excelAccess ? 'Revoke' : 'Grant'} Excel Access</button>` : ''}
-                        ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAuditAccess('${user.username}')">${user.auditAccess ? 'Revoke' : 'Grant'} Audit Access</button>` : ''}
-                        ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAnalyticsAccess('${user.username}')">${user.analyticsAccess ? 'Revoke' : 'Grant'} Analytics Access</button>` : ''}
-                        <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">🗑️ Delete</button>
-                    </div>
-                `;
-                container.appendChild(userCard);
-            });
         }
 
-        function loadPendingSignups() {
+        async function loadPendingSignups() {
             const container = document.getElementById('pendingSignupsContainer');
-            const pendingList = Object.values(pendingSignups);
+            try {
+                const res = await fetch(API_BASE + '/auth/pending-signups', { headers: getAuthHeaders() });
+                if (!res.ok) { container.innerHTML = '<p>Failed to load pending signups.</p>'; return; }
+                const pendingList = await handleResponse(res);
 
-            if (pendingList.length === 0) {
-                container.innerHTML = '<p>No pending signups.</p>';
-                return;
+                if (pendingList.length === 0) {
+                    container.innerHTML = '<p>No pending signups.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                pendingList.forEach(user => {
+                    const userCard = document.createElement('div');
+                    userCard.className = 'user-card pending';
+                    userCard.innerHTML = `
+                        <h4>⏳ ${user.username}</h4>
+                        <p><strong>Requested:</strong> ${new Date(user.timestamp).toLocaleString()}</p>
+                        <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                            <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="dataAccess_${user.username}" checked> Data Entry Access</label>
+                            <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="excelAccess_${user.username}"> Excel Import/Export</label>
+                            <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="auditAccess_${user.username}"> Audit Log Access</label>
+                            <label style="display: block;"><input type="checkbox" id="analyticsAccess_${user.username}"> Analytics Access</label>
+                        </div>
+                        <div class="user-actions">
+                            <button class="btn btn-success btn-small" onclick="approvePendingUser('${user.username}')">✅ Approve</button>
+                            <button class="btn btn-danger btn-small" onclick="rejectPendingUser('${user.username}')">❌ Reject</button>
+                        </div>
+                    `;
+                    container.appendChild(userCard);
+                });
+            } catch (err) {
+                container.innerHTML = '<p>Error loading pending signups.</p>';
             }
-
-            container.innerHTML = '';
-            pendingList.forEach(user => {
-                const userCard = document.createElement('div');
-                userCard.className = 'user-card pending';
-                userCard.innerHTML = `
-                    <h4>⏳ ${user.username}</h4>
-                    <div class="password-field">Password: ${user.password}</div>
-                    <p><strong>Requested:</strong> ${new Date(user.timestamp).toLocaleString()}</p>
-                    <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                        <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="dataAccess_${user.username}" checked> Data Entry Access</label>
-                        <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="excelAccess_${user.username}"> Excel Import/Export</label>
-                        <label style="display: block; margin-bottom: 5px;"><input type="checkbox" id="auditAccess_${user.username}"> Audit Log Access</label>
-                        <label style="display: block;"><input type="checkbox" id="analyticsAccess_${user.username}"> Analytics Access</label>
-                    </div>
-                    <div class="user-actions">
-                        <button class="btn btn-success btn-small" onclick="approvePendingUser('${user.username}')">✅ Approve</button>
-                        <button class="btn btn-danger btn-small" onclick="rejectPendingUser('${user.username}')">❌ Reject</button>
-                    </div>
-                `;
-                container.appendChild(userCard);
-            });
         }
 
-        function loadPasswordResetRequests() {
+        async function loadPasswordResetRequests() {
             const container = document.getElementById('passwordResetContainer');
-            const resetList = Object.values(passwordResetRequests).filter(req => req.status === 'pending');
+            try {
+                const res = await fetch(API_BASE + '/auth/password-reset-requests', { headers: getAuthHeaders() });
+                if (!res.ok) { container.innerHTML = '<p>Failed to load password reset requests.</p>'; return; }
+                const resetList = await handleResponse(res);
 
-            if (resetList.length === 0) {
-                container.innerHTML = '<p>No pending password reset requests.</p>';
-                return;
+                if (resetList.length === 0) {
+                    container.innerHTML = '<p>No pending password reset requests.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                resetList.forEach(request => {
+                    const requestCard = document.createElement('div');
+                    requestCard.className = 'user-card password-reset';
+                    requestCard.innerHTML = `
+                        <h4>🔑 ${request.username}</h4>
+                        <p><strong>Requested:</strong> ${new Date(request.timestamp).toLocaleString()}</p>
+                        <div class="user-actions">
+                            <button class="btn btn-success btn-small" onclick="approvePasswordReset('${request.username}')">✅ Approve</button>
+                            <button class="btn btn-danger btn-small" onclick="rejectPasswordReset('${request.username}')">❌ Reject</button>
+                        </div>
+                    `;
+                    container.appendChild(requestCard);
+                });
+            } catch (err) {
+                container.innerHTML = '<p>Error loading password reset requests.</p>';
             }
-
-            container.innerHTML = '';
-            resetList.forEach(request => {
-                const requestCard = document.createElement('div');
-                requestCard.className = 'user-card password-reset';
-                requestCard.innerHTML = `
-                    <h4>🔑 ${request.username}</h4>
-                    <div class="password-field">New Password: ${request.newPassword}</div>
-                    <p><strong>Requested:</strong> ${new Date(request.timestamp).toLocaleString()}</p>
-                    <div class="user-actions">
-                        <button class="btn btn-success btn-small" onclick="approvePasswordReset('${request.username}')">✅ Approve</button>
-                        <button class="btn btn-danger btn-small" onclick="rejectPasswordReset('${request.username}')">❌ Reject</button>
-                    </div>
-                `;
-                container.appendChild(requestCard);
-            });
         }
 
-        // Admin Actions
-        function approveUser(username) {
-            if (users[username]) {
-                users[username].approved = true;
-                localStorage.setItem('users', JSON.stringify(users));
+        async function approveUser(username) {
+            try {
+                const res = await fetch(API_BASE + '/auth/approve-pending-user', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        username,
+                        dataEntryAccess: true,
+                        excelAccess: false,
+                        auditAccess: false,
+                        analyticsAccess: false
+                    })
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `User ${username} approved successfully!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error approving user.', 'error');
             }
         }
 
-        function deleteUser(username) {
-            if (confirm(`Are you sure you want to delete user ${username}?`)) {
-                delete users[username];
-                localStorage.setItem('users', JSON.stringify(users));
+        async function deleteUser(username) {
+            if (!confirm(`Are you sure you want to delete user ${username}?`)) return;
+            try {
+                const res = await fetch(API_BASE + '/auth/delete-user/' + username, {
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `User ${username} deleted successfully!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error deleting user.', 'error');
             }
         }
 
-        function toggleDataAccess(username) {
-            if (users[username]) {
-                const currentAccess = users[username].dataEntryAccess;
-                const action = currentAccess ? 'revoke' : 'grant';
-
-                if (confirm(`Are you sure you want to ${action} data entry access for ${username}?`)) {
-                    users[username].dataEntryAccess = !currentAccess;
-                    localStorage.setItem('users', JSON.stringify(users));
-
-                    const message = currentAccess ? 'Data entry access revoked' : 'Data entry access granted';
-                    showMessage('adminMessage', `${message} for ${username}!`, 'success');
-                    loadAdminData();
-                }
-            }
-        }
-
-        function toggleExcelAccess(username) {
-            if (users[username]) {
-                users[username].excelAccess = !users[username].excelAccess;
-                localStorage.setItem('users', JSON.stringify(users));
-                showMessage('adminMessage', `Excel access for ${username} updated!`, 'success');
+        async function toggleAccess(username, accessType) {
+            const action = 'toggle';
+            if (!confirm(`Are you sure you want to ${action} ${accessType} for ${username}?`)) return;
+            try {
+                const res = await fetch(API_BASE + '/auth/toggle-access', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username, accessType })
+                });
+                const data = await handleResponse(res);
+                showMessage('adminMessage', `${accessType} updated for ${username}!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error toggling access.', 'error');
             }
         }
 
-        function toggleAuditAccess(username) {
-            if (users[username]) {
-                users[username].auditAccess = !users[username].auditAccess;
-                localStorage.setItem('users', JSON.stringify(users));
-                showMessage('adminMessage', `Audit log access for ${username} updated!`, 'success');
-                loadAdminData();
-            }
-        }
+        async function approvePendingUser(username) {
+            const dataAccess = document.getElementById('dataAccess_' + username).checked;
+            const excelAccess = document.getElementById('excelAccess_' + username).checked;
+            const auditAccess = document.getElementById('auditAccess_' + username).checked;
+            const analyticsAccess = document.getElementById('analyticsAccess_' + username).checked;
 
-        function toggleAnalyticsAccess(username) {
-            if (users[username]) {
-                users[username].analyticsAccess = !users[username].analyticsAccess;
-                localStorage.setItem('users', JSON.stringify(users));
-                showMessage('adminMessage', `Analytics access for ${username} updated!`, 'success');
-                loadAdminData();
-            }
-        }
-
-        function approvePendingUser(username) {
-            if (pendingSignups[username]) {
-                const dataAccess = document.getElementById(`dataAccess_${username}`).checked;
-                const excelAccess = document.getElementById(`excelAccess_${username}`).checked;
-                const auditAccess = document.getElementById(`auditAccess_${username}`).checked;
-                const analyticsAccess = document.getElementById(`analyticsAccess_${username}`).checked;
-
-                users[username] = {
-                    ...pendingSignups[username],
-                    approved: true,
-                    dataEntryAccess: dataAccess,
-                    excelAccess: excelAccess,
-                    auditAccess: auditAccess,
-                    analyticsAccess: analyticsAccess
-                };
-                delete pendingSignups[username];
-
-                localStorage.setItem('users', JSON.stringify(users));
-                localStorage.setItem('pendingSignups', JSON.stringify(pendingSignups));
-
+            try {
+                const res = await fetch(API_BASE + '/auth/approve-pending-user', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username, dataEntryAccess: dataAccess, excelAccess, auditAccess, analyticsAccess })
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `User ${username} approved!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error approving user.', 'error');
             }
         }
 
-        function rejectPendingUser(username) {
-            if (pendingSignups[username]) {
-                delete pendingSignups[username];
-                localStorage.setItem('pendingSignups', JSON.stringify(pendingSignups));
+        async function rejectPendingUser(username) {
+            try {
+                const res = await fetch(API_BASE + '/auth/reject-pending-user', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username })
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `User ${username} signup rejected!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error rejecting user.', 'error');
             }
         }
 
-        function approvePasswordReset(username) {
-            const request = passwordResetRequests[username];
-            if (request && request.status === 'pending') {
-                // Update password in users or pendingSignups
-                if (users[username]) {
-                    users[username].password = request.newPassword;
-                    localStorage.setItem('users', JSON.stringify(users));
-                } else if (pendingSignups[username]) {
-                    pendingSignups[username].password = request.newPassword;
-                    localStorage.setItem('pendingSignups', JSON.stringify(pendingSignups));
-                }
-
-                // Mark request as approved
-                passwordResetRequests[username].status = 'approved';
-                localStorage.setItem('passwordResetRequests', JSON.stringify(passwordResetRequests));
-
+        async function approvePasswordReset(username) {
+            try {
+                const res = await fetch(API_BASE + '/auth/approve-password-reset', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username })
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `Password reset approved for ${username}!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error approving password reset.', 'error');
             }
         }
 
-        function rejectPasswordReset(username) {
-            if (passwordResetRequests[username]) {
-                passwordResetRequests[username].status = 'rejected';
-                localStorage.setItem('passwordResetRequests', JSON.stringify(passwordResetRequests));
+        async function rejectPasswordReset(username) {
+            try {
+                const res = await fetch(API_BASE + '/auth/reject-password-reset', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username })
+                });
+                const data = await handleResponse(res);
                 showMessage('adminMessage', `Password reset rejected for ${username}!`, 'success');
                 loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error rejecting password reset.', 'error');
             }
         }
 
-        function refreshDashboard() {
-            // Reload data from localStorage
-            users = JSON.parse(localStorage.getItem('users')) || {};
-            pendingSignups = JSON.parse(localStorage.getItem('pendingSignups')) || {};
-            passwordResetRequests = JSON.parse(localStorage.getItem('passwordResetRequests')) || {};
-
-            loadAdminData();
+        async function refreshDashboard() {
             showMessage('adminMessage', 'Dashboard refreshed!', 'success');
+            loadAdminData();
         }
 
         function backToCalculator() {
@@ -877,7 +858,6 @@
             window.location.href = 'index.html';
         }
 
-        // Form switching functions
         function showLoginForm() {
             hideAllForms();
             document.getElementById('loginForm').classList.remove('hidden');
@@ -905,19 +885,15 @@
         }
 
         function logout() {
+            localStorage.removeItem('token');
             localStorage.removeItem('currentUser');
             showLoginForm();
         }
 
-        // Utility functions
         function showMessage(containerId, message, type) {
             const container = document.getElementById(containerId);
-            container.innerHTML = `<div class="message ${type}">${message}</div>`;
-
-            // Auto-clear messages after 5 seconds
-            setTimeout(() => {
-                container.innerHTML = '';
-            }, 5000);
+            container.innerHTML = '<div class="message ' + type + '">' + message + '</div>';
+            setTimeout(() => { container.innerHTML = ''; }, 5000);
         }
 
         function clearMessages() {
@@ -927,20 +903,15 @@
             document.getElementById('adminMessage').innerHTML = '';
         }
 
-        // Clear all data (for testing - remove in production)
         function clearAllData() {
             localStorage.clear();
-            users = {};
-            pendingSignups = {};
-            passwordResetRequests = {};
-            alert('All data cleared!');
+            alert('All local data cleared!');
             showLoginForm();
         }
 
-        // Add a hidden admin function to clear data (for development)
         window.addEventListener('keydown', function (e) {
             if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-                if (confirm('Clear all data? This action cannot be undone.')) {
+                if (confirm('Clear all local data? This action cannot be undone.')) {
                     clearAllData();
                 }
             }
