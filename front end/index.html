@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Data Entry System</title>
+    <link rel="icon" type="image/png" href="simpleimage.png">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="nav-menu">
+                <a href="simple13.html" class="nav-btn">📊 Calculator</a>
+                <a href="index.html" class="nav-btn nav-current">📋 Data Entry</a>
+            </div>
+            <div class="header-content">
+                <h1>📋 Customer Data Management System</h1>
+                <p>Manage customer information and item details efficiently with Excel import/export</p>
+            </div>
+            <div class="nav-menu">
+                <span id="currentUserName" style="margin-right: 10px; font-weight: bold;">Welcome!</span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('entry')">📝 Data Entry</button>
+                <button class="tab" onclick="showTab('search')">🔍 Search Records</button>
+                <button class="tab" onclick="showTab('all')">📊 All Records</button>
+                <button class="tab" onclick="showTab('excel')">📊 Excel Import/Export</button>
+                <button id="auditTab" class="tab" onclick="showTab('audit')" style="display: none;">🔍 Audit Logs</button>
+                <button class="tab" onclick="showTab('analytics')">📊 Analytics</button>
+            </div>
+
+            <!-- Data Entry Tab -->
+            <div id="entryTab" class="tab-content active">
+                <form id="dataEntryForm">
+                    <div class="form-section">
+                        <h3>📋 Bill Information</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="billNo">Bill Number *</label>
+                                <div class="auto-bill-container">
+                                    <input type="text" id="billNo" required placeholder="Enter bill number">
+                                    <button type="button" class="btn btn-secondary" onclick="generateBillNumber()">🔄 Auto</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="billDate">Bill Date</label>
+                                <input type="date" id="billDate">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>👤 Customer Information</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="customerName">Customer Name *</label>
+                                <input type="text" id="customerName" required placeholder="Enter customer name">
+                            </div>
+                            <div class="form-group">
+                                <label for="phoneNumber">Phone Number</label>
+                                <input type="tel" id="phoneNumber" placeholder="Enter phone number">
+                            </div>
+                            <div class="form-group">
+                                <label for="address">Address *</label>
+                                <textarea id="address" rows="2" required placeholder="Enter customer address"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>💍 Item Details</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="itemName">Item Name *</label>
+                                <input type="text" id="itemName" required placeholder="Enter item name">
+                            </div>
+                            <div class="form-group">
+                                <label for="itemType">Item Type *</label>
+                                <select id="itemType" required>
+                                    <option value="">Select item type</option>
+                                    <option value="Gold">Gold</option>
+                                    <option value="Silver">Silver</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="itemAmount">Item Amount (₹) *</label>
+                                <input type="number" id="itemAmount" required step="0.01" placeholder="Enter amount">
+                            </div>
+                            <div class="form-group">
+                                <label for="interest">Interest (%) *</label>
+                                <input type="number" id="interest" required step="0.01" placeholder="Enter interest rate">
+                            </div>
+                            <div class="form-group">
+                                <label for="weight">Weight (grams) *</label>
+                                <input type="number" id="weight" required step="0.01" placeholder="Enter weight">
+                            </div>
+                            <div class="form-group">
+                                <label for="purity">Purity (Karat/Percentage)</label>
+                                <input type="text" id="purity" placeholder="e.g., 22K or 92.5%">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>💰 Extra Money & Payments</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="extraMoneyCount">Number of times extra money taken</label>
+                                <select id="extraMoneyCount" onchange="generateExtraMoneyFields()">
+                                    <option value="0">Select number of times</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                    <option value="8">8</option>
+                                    <option value="9">9</option>
+                                    <option value="10">10</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="moneyBackCount">Number of times money given back</label>
+                                <select id="moneyBackCount" onchange="generateMoneyBackFields()">
+                                    <option value="0">Select number of times</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                    <option value="8">8</option>
+                                    <option value="9">9</option>
+                                    <option value="10">10</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div id="extraMoneyContainer"></div>
+                        <div id="moneyBackContainer"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>📝 Additional Information</h3>
+                        <div class="form-grid">
+                        <div class="form-group">
+                            <label for="pendingMoney">Pending Money (₹)</label>
+                            <input type="number" id="pendingMoney" step="0.01" placeholder="Enter pending amount (if any)">
+                        </div>
+                        <div class="form-group">
+                            <label for="notes">Notes</label>
+                            <textarea id="notes" rows="3" placeholder="Any additional notes or comments"></textarea>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 30px;">
+                        <button type="submit" class="btn btn-success">💾 Save Record</button>
+                        <button type="button" class="btn btn-secondary" onclick="clearForm()">🗑️ Clear Form</button>
+                    </div>
+                </form>
+
+                <div id="entryMessage"></div>
+            </div>
+
+            <!-- Search Tab -->
+            <div id="searchTab" class="tab-content">
+                <div class="form-section search-section">
+                    <h3>🔍 Search Records</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="searchType">Search By</label>
+                            <select id="searchType">
+                                <option value="billNo">Bill Number</option>
+                                <option value="customerName">Customer Name</option>
+                                <option value="phoneNumber">Phone Number</option>
+                                <option value="itemType">Item Type</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="searchValue">Search Value</label>
+                            <input type="text" id="searchValue" placeholder="Enter search term">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: end;">
+                            <button type="button" class="btn btn-primary" onclick="searchRecords()">🔍 Search</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter Section for Search -->
+                <div class="form-section filter-section">
+                    <h3>🔧 Filter Options</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="searchFilterType">Filter by Item Type</label>
+                            <select id="searchFilterType" onchange="searchRecords()">
+                                <option value="">All Types</option>
+                                <option value="Gold">Gold</option>
+                                <option value="Silver">Silver</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="searchFilterStatus">Filter by Status</label>
+                            <select id="searchFilterStatus" onchange="searchRecords()">
+                                <option value="">All Records</option>
+                                <option value="active">Active Only</option>
+                                <option value="sold">Sold Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="searchMinAmount">Min Amount (₹)</label>
+                            <input type="number" id="searchMinAmount" placeholder="Minimum amount" onchange="searchRecords()">
+                        </div>
+                        <div class="form-group">
+                            <label for="searchMaxAmount">Max Amount (₹)</label>
+                            <input type="number" id="searchMaxAmount" placeholder="Maximum amount" onchange="searchRecords()">
+                        </div>
+                        <div class="form-group">
+                            <label for="searchPendingFilter">Pending Money</label>
+                            <select id="searchPendingFilter" onchange="searchRecords()">
+                                <option value="">All Records</option>
+                                <option value="pending">Has Pending Money</option>
+                                <option value="no-pending">No Pending Money</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Actions for Search -->
+                <div id="searchBulkActions" class="form-section bulk-actions">
+                    <div class="bulk-actions-header">
+                        <h3>Bulk Actions</h3>
+                        <span id="searchSelectedCount">0 selected</span>
+                    </div>
+                    <div class="bulk-actions-buttons">
+                        <button type="button" class="btn btn-success" onclick="bulkMarkAsSold('search')">Mark as Sold</button>
+                        <button type="button" class="btn btn-danger" onclick="bulkDelete('search')">Delete Selected</button>
+                        <button type="button" class="btn btn-secondary" onclick="clearSelection('search')">Clear Selection</button>
+                    </div>
+                </div>
+
+                <div id="searchResults" class="search-results"></div>
+            </div>
+
+            <!-- All Records Tab -->
+            <div id="allTab" class="tab-content">
+                <div class="form-section">
+                    <h3>📊 All Records</h3>
+                    <button type="button" class="btn btn-primary" onclick="loadAllRecords()">🔄 Refresh Records</button>
+                </div>
+
+                <!-- Filter Section for All Records -->
+                <div class="form-section filter-section">
+                    <h3>🔧 Filter Options</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="allFilterType">Filter by Item Type</label>
+                            <select id="allFilterType" onchange="loadAllRecords()">
+                                <option value="">All Types</option>
+                                <option value="Gold">Gold</option>
+                                <option value="Silver">Silver</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="allFilterStatus">Filter by Status</label>
+                            <select id="allFilterStatus" onchange="loadAllRecords()">
+                                <option value="">All Records</option>
+                                <option value="active">Active Only</option>
+                                <option value="sold">Sold Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="allMinAmount">Min Amount (₹)</label>
+                            <input type="number" id="allMinAmount" placeholder="Minimum amount" onchange="loadAllRecords()">
+                        </div>
+                        <div class="form-group">
+                            <label for="allMaxAmount">Max Amount (₹)</label>
+                            <input type="number" id="allMaxAmount" placeholder="Maximum amount" onchange="loadAllRecords()">
+                        </div>
+                        <div class="form-group">
+                            <label for="allPendingFilter">Pending Money</label>
+                            <select id="allPendingFilter" onchange="loadAllRecords()">
+                                <option value="">All Records</option>
+                                <option value="pending">Has Pending Money</option>
+                                <option value="no-pending">No Pending Money</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sortBy">Sort By</label>
+                            <select id="sortBy" onchange="loadAllRecords()">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="amount-high">Amount (High to Low)</option>
+                                <option value="amount-low">Amount (Low to High)</option>
+                                <option value="name">Customer Name</option>
+                                <option value="pending-high">Pending Money (High to Low)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Actions for All Records -->
+                <div id="allBulkActions" class="form-section bulk-actions">
+                    <div class="bulk-actions-header">
+                        <h3>Bulk Actions</h3>
+                        <span id="allSelectedCount">0 selected</span>
+                    </div>
+                    <div class="bulk-actions-buttons">
+                        <button type="button" class="btn btn-success" onclick="bulkMarkAsSold('all')">Mark as Sold</button>
+                        <button type="button" class="btn btn-danger" onclick="bulkDelete('all')">Delete Selected</button>
+                        <button type="button" class="btn btn-secondary" onclick="clearSelection('all')">Clear Selection</button>
+                    </div>
+                </div>
+
+                <div id="allRecords" class="search-results"></div>
+            </div>
+
+            <!-- Excel Import/Export Tab -->
+            <div id="excelTab" class="tab-content">
+                <div class="form-section excel-section">
+                    <h3>📊 Excel Export</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Export all customer records to an Excel file (.xlsx format)</p>
+                    <button type="button" class="btn btn-success" onclick="exportToExcel()">📥 Export to Excel</button>
+                </div>
+
+                <div class="form-section excel-section">
+                    <h3>📋 Excel Import</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Import customer records from an Excel file. The Excel file should have the following columns:</p>
+                    <ul style="margin-bottom: 15px; color: #666; margin-left: 20px;">
+                        <li>Bill Number</li>
+                        <li>Bill Date (YYYY-MM-DD format)</li>
+                        <li>Customer Name</li>
+                        <li>Phone Number</li>
+                        <li>Address</li>
+                        <li>Item Name</li>
+                        <li>Item Type (Gold/Silver)</li>
+                        <li>Item Amount</li>
+                        <li>Interest (%)</li>
+                        <li>Weight (grams)</li>
+                        <li>Purity</li>
+                        <li>Pending Money (number)</li>
+                        <li>Extra Money Count (number)</li>
+                        <li>Money Back Count (number)</li>
+                        <li>Notes</li>
+                        <li>Status (Active/Sold)</li>
+                    </ul>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="excelFile" class="file-input" accept=".xlsx,.xls" onchange="importFromExcel()">
+                        <label for="excelFile" class="file-input-label">📤 Select Excel File</label>
+                    </div>
+                    <div id="importProgress" class="import-progress" style="display: none;"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>📋 Sample Template</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Download a sample Excel template with the correct column format</p>
+                    <button type="button" class="btn btn-info" onclick="downloadTemplate()">📋 Download Template</button>
+                </div>
+
+                <div id="excelMessage"></div>
+            </div>
+
+            <!-- Audit Logs Tab -->
+            <div id="auditTab" class="tab-content">
+                <div class="form-section">
+                    <h3>🔍 System Audit Logs</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Complete history of all system activities and data changes</p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="auditFilter">Filter by Action</label>
+                            <select id="auditFilter" onchange="loadAuditLogs()">
+                                <option value="">All Actions</option>
+                                <option value="CREATE">Create Records</option>
+                                <option value="UPDATE">Update Records</option>
+                                <option value="DELETE">Delete Records</option>
+                                <option value="MARK_SOLD">Mark as Sold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="auditUserFilter">Filter by User</label>
+                            <select id="auditUserFilter" onchange="loadAuditLogs()">
+                                <option value="">All Users</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="auditDateFilter">Filter by Date</label>
+                            <input type="date" id="auditDateFilter" onchange="loadAuditLogs()">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: end;">
+                            <button type="button" class="btn btn-primary" onclick="loadAuditLogs()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="auditResults" class="search-results"></div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analyticsTab" class="tab-content">
+                <div class="form-section">
+                    <h3>📊 Business Analytics Dashboard</h3>
+                    <p style="margin-bottom: 15px; color: #666;">Comprehensive analysis of your business data</p>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="analyticsDateFrom">From Date</label>
+                            <input type="date" id="analyticsDateFrom" onchange="updateAnalytics()">
+                        </div>
+                        <div class="form-group">
+                            <label for="analyticsDateTo">To Date</label>
+                            <input type="date" id="analyticsDateTo" onchange="updateAnalytics()">
+                        </div>
+                        <div class="form-group">
+                            <label for="analyticsType">Chart Type</label>
+                            <select id="analyticsType" onchange="updateAnalytics()">
+                                <option value="sales">Daily Sales</option>
+                                <option value="itemType">Item Type Distribution</option>
+                                <option value="status">Status Distribution</option>
+                                <option value="pending">Pending Money Analysis</option>
+                                <option value="monthly">Monthly Revenue</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: end;">
+                            <button type="button" class="btn btn-primary" onclick="updateAnalytics()">📊 Update Charts</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Summary Cards -->
+                <div id="summaryCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;"></div>
+                
+                <!-- Charts Container -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                    <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                        <canvas id="mainChart" width="400" height="300"></canvas>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                        <canvas id="secondaryChart" width="400" height="300"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Detailed Analytics -->
+                <div id="detailedAnalytics" style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 20px 0;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="historyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Record History</h2>
+                <button class="close" onclick="closeHistoryModal()">&times;</button>
+            </div>
+            <div id="historyContent">
+                <p>Loading history...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>✏️ Edit Record</h2>
+                <button class="close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="editForm">
+                <input type="hidden" id="editId">
+                
+                <div class="form-section">
+                    <h3>📋 Bill Information</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="editBillNo">Bill Number *</label>
+                            <input type="text" id="editBillNo" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editBillDate">Bill Date</label>
+                            <input type="date" id="editBillDate">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>👤 Customer Information</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="editCustomerName">Customer Name *</label>
+                            <input type="text" id="editCustomerName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editPhoneNumber">Phone Number</label>
+                            <input type="tel" id="editPhoneNumber">
+                        </div>
+                        <div class="form-group">
+                            <label for="editAddress">Address *</label>
+                            <textarea id="editAddress" rows="2" required></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>💍 Item Details</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="editItemName">Item Name *</label>
+                            <input type="text" id="editItemName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editItemType">Item Type *</label>
+                            <select id="editItemType" required>
+                                <option value="">Select item type</option>
+                                <option value="Gold">Gold</option>
+                                <option value="Silver">Silver</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editItemAmount">Item Amount (₹) *</label>
+                            <input type="number" id="editItemAmount" required step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label for="editInterest">Interest (%) *</label>
+                            <input type="number" id="editInterest" required step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label for="editWeight">Weight (grams) *</label>
+                            <input type="number" id="editWeight" required step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label for="editPurity">Purity (Karat/Percentage)</label>
+                            <input type="text" id="editPurity">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>💰 Extra Money & Payments</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="editExtraMoneyCount">Number of times extra money taken</label>
+                            <select id="editExtraMoneyCount" onchange="generateEditExtraMoneyFields()">
+                                <option value="0">Select number of times</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editMoneyBackCount">Number of times money given back</label>
+                            <select id="editMoneyBackCount" onchange="generateEditMoneyBackFields()">
+                                <option value="0">Select number of times</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="editExtraMoneyContainer"></div>
+                    <div id="editMoneyBackContainer"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>📝 Additional Information</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="editPendingMoney">Pending Money (₹)</label>
+                            <input type="number" id="editPendingMoney" step="0.01" placeholder="Enter pending amount">
+                        </div>
+                        <div class="form-group">
+                            <label for="editNotes">Notes</label>
+                            <textarea id="editNotes" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="editStatus">Status</label>
+                            <select id="editStatus">
+                                <option value="active">Active</option>
+                                <option value="sold">Sold</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="btn btn-success">💾 Update Record</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
