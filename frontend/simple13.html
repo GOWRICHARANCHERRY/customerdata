@@ -344,6 +344,7 @@
     <div class="action-buttons">
       <button onclick="calculateInterest()">Calculate</button>
       <button id="soldButton" class="sold-btn" onclick="markAsSold()">Sold</button>
+      <button class="history-btn" onclick="showHistory()">📜 History</button>
     </div>
 
     <div id="transactionManager" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #007bff;">
@@ -382,7 +383,6 @@
 
     <div style="display: flex; gap: 10px; margin-top: 10px;">
       <button class="print-btn" onclick="window.print()">🖨️ Print Bill</button>
-      <button class="history-btn" onclick="showHistory()">📜 History</button>
     </div>
   </div>
 
@@ -497,14 +497,14 @@
           currentSearchedRecordId = foundRecord.id;
           currentSearchedRecordStatus = foundRecord.status;
 
-          if (foundRecord.status === 'sold') {
+          if ((foundRecord.status || '').toLowerCase() === 'sold') {
             document.getElementById('soldStatusContainer').style.display = 'block';
             document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD</strong></div>';
             document.getElementById('soldButton').disabled = true;
             document.getElementById('soldButton').textContent = '✅ Already Sold';
           }
 
-          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName + (foundRecord.status === 'sold' ? '\n⚠️ Status: SOLD' : ''));
+          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName + ((foundRecord.status || '').toLowerCase() === 'sold' ? '\n⚠️ Status: SOLD' : ''));
 
           calculateInterest();
         } else {
@@ -583,6 +583,10 @@
     async function markAsSold() {
       const billNumber = document.getElementById('billNumber').value.trim();
       if (!billNumber) { alert('Please enter a bill number before marking as sold.'); return; }
+      if (currentSearchedRecordStatus && currentSearchedRecordStatus.toLowerCase() === 'sold') {
+        alert('This bill is already marked as SOLD.');
+        return;
+      }
       if (!confirm('Are you sure you want to mark bill ' + billNumber + ' as SOLD?')) return;
 
       try {
@@ -1083,10 +1087,6 @@
 
       const itemType = document.getElementById('itemTypeDisplay')?.value || '';
 
-      let billHeader = document.getElementById("billHeader");
-      const soldStatus = currentSearchedRecordStatus === 'sold' ? ' <span class="sold-badge">SOLD</span>' : '';
-      billHeader.innerHTML = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
-
       let resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
 
@@ -1162,6 +1162,15 @@
       }
 
       let finalBalance = grandTotalAmount - totalPayments;
+
+      let billHeader = document.getElementById("billHeader");
+      const isSold = (currentSearchedRecordStatus || '').toLowerCase() === 'sold';
+      const soldStatus = isSold ? ' <span class="sold-badge">Already Sold</span>' : '';
+      let headerHtml = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
+      if (isSold) {
+        headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 5px 0 0 0;">Balance Remaining: ₹' + finalBalance.toFixed(2) + '</p>';
+      }
+      billHeader.innerHTML = headerHtml;
 
       let summaryHTML = `
         <h3>Summary</h3>
