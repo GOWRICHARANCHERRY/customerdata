@@ -1168,7 +1168,7 @@
       const soldStatus = isSold ? ' <span class="sold-badge">Already Sold</span>' : '';
       let headerHtml = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
       if (isSold) {
-        headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 5px 0 0 0;">Balance Remaining: ₹' + finalBalance.toFixed(2) + '</p>';
+        headerHtml += '<p style="font-weight: bold; color: #28a745; margin: 5px 0 0 0;">Balance Remaining: ₹0.00 <span style="font-weight: normal; color: #666; font-size: 13px;">(settled on sale)</span></p>';
       }
       billHeader.innerHTML = headerHtml;
 
@@ -1193,12 +1193,13 @@
         summaryHTML += '<tr class="payment-row"><td><strong>TOTAL PAYMENTS</strong></td><td><strong>-</strong></td><td><strong>-' + paymentResults.reduce((sum, p) => sum + p.principal, 0).toFixed(2) + '</strong></td><td><strong>-' + totalPaymentInterest.toFixed(2) + '</strong></td><td><strong>-' + totalPayments.toFixed(2) + '</strong></td></tr>';
       }
 
-      summaryHTML += '<tr class="total-row" style="background: ' + (finalBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + finalBalance.toFixed(2) + '</strong></td></tr></table>';
+      const displayBalance = isSold ? 0 : finalBalance;
+      summaryHTML += '<tr class="total-row" style="background: ' + (displayBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayBalance.toFixed(2) + '</strong></td></tr></table>';
 
-      if (finalBalance <= 0) {
+      if (displayBalance <= 0) {
         summaryHTML += '<p style="color: green; font-weight: bold; text-align: center; margin-top: 10px;">✓ Account Settled</p>';
       } else {
-        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Balance Remaining: ₹' + finalBalance.toFixed(2) + '</p>';
+        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Balance Remaining: ₹' + displayBalance.toFixed(2) + '</p>';
       }
 
       resultDiv.innerHTML = allTablesHTML + summaryHTML;

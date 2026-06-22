@@ -238,9 +238,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const changes = [];
     if (oldRecord.customerName !== updated.customerName) changes.push(`customerName: "${oldRecord.customerName}" → "${updated.customerName}"`);
+    if (oldRecord.phoneNumber !== updated.phoneNumber) changes.push(`phoneNumber: "${oldRecord.phoneNumber}" → "${updated.phoneNumber}"`);
+    if (oldRecord.address !== updated.address) changes.push(`address: "${oldRecord.address}" → "${updated.address}"`);
+    if (oldRecord.itemName !== updated.itemName) changes.push(`itemName: "${oldRecord.itemName}" → "${updated.itemName}"`);
+    if (oldRecord.itemType !== updated.itemType) changes.push(`itemType: "${oldRecord.itemType}" → "${updated.itemType}"`);
     if (oldRecord.itemAmount !== updated.itemAmount) changes.push(`itemAmount: "${oldRecord.itemAmount}" → "${updated.itemAmount}"`);
+    if (oldRecord.interest !== updated.interest) changes.push(`interest: "${oldRecord.interest}" → "${updated.interest}"`);
+    if (oldRecord.weight !== updated.weight) changes.push(`weight: "${oldRecord.weight}" → "${updated.weight}"`);
+    if (oldRecord.purity !== updated.purity) changes.push(`purity: "${oldRecord.purity}" → "${updated.purity}"`);
+    if (oldRecord.notes !== updated.notes) changes.push(`notes: "${oldRecord.notes}" → "${updated.notes}"`);
+    if (oldRecord.billDate !== updated.billDate) changes.push(`billDate: "${oldRecord.billDate}" → "${updated.billDate}"`);
     if (oldRecord.status !== updated.status) changes.push(`status: "${oldRecord.status}" → "${updated.status}"`);
     if (oldRecord.pendingMoney !== updated.pendingMoney) changes.push(`pendingMoney: "${oldRecord.pendingMoney}" → "${updated.pendingMoney}"`);
+    if ((oldRecord.extraMoneyCount || 0) !== (updated.extraMoneyCount || 0)) changes.push(`extraMoneyCount: "${oldRecord.extraMoneyCount || 0}" → "${updated.extraMoneyCount || 0}"`);
+    if (JSON.stringify(oldRecord.extraMoney || []) !== JSON.stringify(updated.extraMoney || [])) changes.push(`extraMoney updated`);
+    if ((oldRecord.moneyBackCount || 0) !== (updated.moneyBackCount || 0)) changes.push(`moneyBackCount: "${oldRecord.moneyBackCount || 0}" → "${updated.moneyBackCount || 0}"`);
+    if (JSON.stringify(oldRecord.moneyBack || []) !== JSON.stringify(updated.moneyBack || [])) changes.push(`moneyBack updated`);
 
     await addAuditLog(db.query, 'UPDATE', req.params.id, updated, {
       message: `Record updated: ${updated.customerName}`,
@@ -324,9 +337,14 @@ router.post('/:id/mark-sold', authenticateToken, async (req, res) => {
     const record = recResult.rows[0];
     if (!record) return res.status(404).json({ error: 'Record not found' });
 
+    const changes = [];
+    changes.push(`status: "${record.status || 'active'}" → "sold"`);
+    if (record.pendingMoney > 0) changes.push(`pendingMoney: "${record.pendingMoney}" → "0 (settled on sale)"`);
+
     await addAuditLog(db.query, 'MARK_SOLD', req.params.id, record, {
       message: `Record marked as sold: ${record.customerName}`,
-      previousStatus: record.status || 'active'
+      previousStatus: record.status || 'active',
+      changes
     }, req.user);
 
     await db.query("UPDATE customer_records SET status = 'sold', \"soldAt\" = NOW(), \"updatedAt\" = NOW() WHERE id = $1", [req.params.id]);
