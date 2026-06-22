@@ -25,7 +25,7 @@ function adminOnly(req, res, next) {
   next();
 }
 
-router.post('/signup', (req, res) => {
+router.post('/signup', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -39,14 +39,14 @@ router.post('/signup', (req, res) => {
       return res.status(400).json({ error: 'This username is reserved' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    const existingPending = db.prepare('SELECT id FROM pending_signups WHERE username = ?').get(username);
-    if (existingUser || existingPending) {
+    const existingUser = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+    const existingPending = await db.query('SELECT id FROM pending_signups WHERE username = $1', [username]);
+    if (existingUser.rows.length > 0 || existingPending.rows.length > 0) {
       return res.status(400).json({ error: 'Username already exists or is pending approval' });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
-    db.prepare('INSERT INTO pending_signups (username, password) VALUES (?, ?)').run(username, hashedPassword);
+    await db.query('INSERT INTO pending_signups (username, password) VALUES ($1, $2)', [username, hashedPassword]);
 
     res.json({ message: 'Account created! Please wait for admin approval.' });
   } catch (err) {
@@ -54,14 +54,15 @@ router.post('/signup', (req, res) => {
   }
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = result.rows[0];
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
@@ -96,7 +97,7 @@ router.post('/login', (req, res) => {
   }
 });
 
-router.post('/forgot-password', (req, res) => {
+router.post('/forgot-password', async (req, res) => {
   try {
     const { username, newPassword } = req.body;
     if (!username || !newPassword) {
@@ -110,14 +111,14 @@ router.post('/forgot-password', (req, res) => {
       return res.status(400).json({ error: 'Cannot reset password for admin account' });
     }
 
-    const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    const pending = db.prepare('SELECT id FROM pending_signups WHERE username = ?').get(username);
-    if (!user && !pending) {
+    const userResult = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+    const pendingResult = await db.query('SELECT id FROM pending_signups WHERE username = $1', [username]);
+    if (userResult.rows.length === 0 && pendingResult.rows.length === 0) {
       return res.status(404).json({ error: 'Username not found' });
     }
 
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
-    db.prepare('INSERT INTO password_reset_requests (username, newPassword) VALUES (?, ?)').run(username, hashedPassword);
+    await db.query('INSERT INTO password_reset_requests (username, "newPassword") VALUES ($1, $2)', [username, hashedPassword]);
 
     res.json({ message: 'Password reset request submitted. Wait for admin approval.' });
   } catch (err) {
@@ -125,45 +126,46 @@ router.post('/forgot-password', (req, res) => {
   }
 });
 
-router.get('/users', authenticateToken, adminOnly, (req, res) => {
+router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, role, approved, dataEntryAccess, excelAccess, auditAccess, analyticsAccess, createdAt FROM users').all();
-    res.json(users);
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "createdAt" FROM users');
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/pending-signups', authenticateToken, adminOnly, (req, res) => {
+router.get('/pending-signups', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const pending = db.prepare('SELECT * FROM pending_signups').all();
-    res.json(pending);
+    const result = await db.query('SELECT * FROM pending_signups');
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/password-reset-requests', authenticateToken, adminOnly, (req, res) => {
+router.get('/password-reset-requests', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const requests = db.prepare("SELECT * FROM password_reset_requests WHERE status = 'pending'").all();
-    res.json(requests);
+    const result = await db.query("SELECT * FROM password_reset_requests WHERE status = 'pending'");
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/approve-pending-user', authenticateToken, adminOnly, (req, res) => {
+router.post('/approve-pending-user', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username, dataEntryAccess, excelAccess, auditAccess, analyticsAccess } = req.body;
-    const pending = db.prepare('SELECT * FROM pending_signups WHERE username = ?').get(username);
+    const pendingResult = await db.query('SELECT * FROM pending_signups WHERE username = $1', [username]);
+    const pending = pendingResult.rows[0];
     if (!pending) return res.status(404).json({ error: 'Pending signup not found' });
 
-    db.prepare(`INSERT INTO users (username, password, role, approved, dataEntryAccess, excelAccess, auditAccess, analyticsAccess)
-      VALUES (?, ?, 'user', 1, ?, ?, ?, ?)`).run(
-      pending.username, pending.password,
-      dataEntryAccess ? 1 : 0, excelAccess ? 1 : 0, auditAccess ? 1 : 0, analyticsAccess ? 1 : 0
+    await db.query(
+      `INSERT INTO users (username, password, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess")
+       VALUES ($1, $2, 'user', 1, $3, $4, $5, $6)`,
+      [pending.username, pending.password, dataEntryAccess ? 1 : 0, excelAccess ? 1 : 0, auditAccess ? 1 : 0, analyticsAccess ? 1 : 0]
     );
-    db.prepare('DELETE FROM pending_signups WHERE username = ?').run(username);
+    await db.query('DELETE FROM pending_signups WHERE username = $1', [username]);
 
     res.json({ message: `User ${username} approved!` });
   } catch (err) {
@@ -171,49 +173,50 @@ router.post('/approve-pending-user', authenticateToken, adminOnly, (req, res) =>
   }
 });
 
-router.post('/reject-pending-user', authenticateToken, adminOnly, (req, res) => {
+router.post('/reject-pending-user', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.body;
-    db.prepare('DELETE FROM pending_signups WHERE username = ?').run(username);
+    await db.query('DELETE FROM pending_signups WHERE username = $1', [username]);
     res.json({ message: `User ${username} rejected.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/approve-password-reset', authenticateToken, adminOnly, (req, res) => {
+router.post('/approve-password-reset', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.body;
-    const request = db.prepare("SELECT * FROM password_reset_requests WHERE username = ? AND status = 'pending'").get(username);
+    const reqResult = await db.query("SELECT * FROM password_reset_requests WHERE username = $1 AND status = 'pending'", [username]);
+    const request = reqResult.rows[0];
     if (!request) return res.status(404).json({ error: 'Password reset request not found' });
 
-    const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    if (user) {
-      db.prepare('UPDATE users SET password = ?, updatedAt = datetime(\'now\') WHERE username = ?').run(request.newPassword, username);
+    const userResult = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+    if (userResult.rows.length > 0) {
+      await db.query('UPDATE users SET password = $1, "updatedAt" = NOW() WHERE username = $2', [request.newPassword, username]);
     }
-    const pending = db.prepare('SELECT id FROM pending_signups WHERE username = ?').get(username);
-    if (pending) {
-      db.prepare('UPDATE pending_signups SET password = ? WHERE username = ?').run(request.newPassword, username);
+    const pendingResult = await db.query('SELECT id FROM pending_signups WHERE username = $1', [username]);
+    if (pendingResult.rows.length > 0) {
+      await db.query('UPDATE pending_signups SET password = $1 WHERE username = $2', [request.newPassword, username]);
     }
 
-    db.prepare("UPDATE password_reset_requests SET status = 'approved' WHERE username = ?").run(username);
+    await db.query("UPDATE password_reset_requests SET status = 'approved' WHERE username = $1", [username]);
     res.json({ message: `Password reset approved for ${username}!` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/reject-password-reset', authenticateToken, adminOnly, (req, res) => {
+router.post('/reject-password-reset', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.body;
-    db.prepare("UPDATE password_reset_requests SET status = 'rejected' WHERE username = ?").run(username);
+    await db.query("UPDATE password_reset_requests SET status = 'rejected' WHERE username = $1", [username]);
     res.json({ message: `Password reset rejected for ${username}.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/toggle-access', authenticateToken, adminOnly, (req, res) => {
+router.post('/toggle-access', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username, accessType } = req.body;
     const validTypes = ['dataEntryAccess', 'excelAccess', 'auditAccess', 'analyticsAccess'];
@@ -221,11 +224,15 @@ router.post('/toggle-access', authenticateToken, adminOnly, (req, res) => {
       return res.status(400).json({ error: 'Invalid access type' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = userResult.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const currentValue = user[accessType];
-    db.prepare(`UPDATE users SET ${accessType} = ?, updatedAt = datetime('now') WHERE username = ?`).run(currentValue ? 0 : 1, username);
+    await db.query(
+      `UPDATE users SET "${accessType}" = $1, "updatedAt" = NOW() WHERE username = $2`,
+      [currentValue ? 0 : 1, username]
+    );
 
     res.json({ message: `${accessType} toggled for ${username}`, newValue: currentValue ? 0 : 1 });
   } catch (err) {
@@ -233,21 +240,22 @@ router.post('/toggle-access', authenticateToken, adminOnly, (req, res) => {
   }
 });
 
-router.delete('/delete-user/:username', authenticateToken, adminOnly, (req, res) => {
+router.delete('/delete-user/:username', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.params;
     if (username === 'gowricharan') {
       return res.status(400).json({ error: 'Cannot delete master admin account' });
     }
-    db.prepare('DELETE FROM users WHERE username = ?').run(username);
+    await db.query('DELETE FROM users WHERE username = $1', [username]);
     res.json({ message: `User ${username} deleted.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/me', authenticateToken, (req, res) => {
-  const user = db.prepare('SELECT id, username, role, approved, dataEntryAccess, excelAccess, auditAccess, analyticsAccess FROM users WHERE username = ?').get(req.user.username);
+router.get('/me', authenticateToken, async (req, res) => {
+  const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess" FROM users WHERE username = $1', [req.user.username]);
+  const user = result.rows[0];
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({
     username: user.username,

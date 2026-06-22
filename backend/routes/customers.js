@@ -8,95 +8,102 @@ const { authenticateToken, adminOnly } = require('./auth');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-function addAuditLog(action, recordId, recordData, details = {}, user) {
+async function addAuditLog(queryFn, action, recordId, recordData, details = {}, user) {
   const logEntry = {
     id: uuidv4(),
-    timestamp: new Date().toISOString(),
     user: user.username,
     userRole: user.role || 'user',
     action,
     recordId,
-    recordData: JSON.stringify(recordData || {}),
-    details: JSON.stringify(details),
+    recordData: recordData || {},
+    details,
     billNumber: recordData ? recordData.billNo : null,
     customerName: recordData ? recordData.customerName : null
   };
 
-  db.prepare(`INSERT INTO audit_logs (id, timestamp, user, userRole, action, recordId, recordData, details, billNumber, customerName)
-    VALUES (@id, @timestamp, @user, @userRole, @action, @recordId, @recordData, @details, @billNumber, @customerName)`).run(logEntry);
+  await queryFn(
+    `INSERT INTO audit_logs (id, timestamp, "user", "userRole", action, "recordId", "recordData", details, "billNumber", "customerName")
+     VALUES ($1, NOW(), $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)`,
+    [logEntry.id, logEntry.user, logEntry.userRole, logEntry.action, logEntry.recordId,
+     JSON.stringify(logEntry.recordData), JSON.stringify(logEntry.details), logEntry.billNumber, logEntry.customerName]
+  );
 
   if (recordId) {
-    db.prepare(`INSERT INTO record_histories (id, recordId, timestamp, user, userRole, action, recordData, details, billNumber, customerName)
-      VALUES (@id, @recordId, @timestamp, @user, @userRole, @action, @recordData, @details, @billNumber, @customerName)`).run(logEntry);
+    await queryFn(
+      `INSERT INTO record_histories (id, "recordId", timestamp, "user", "userRole", action, "recordData", details, "billNumber", "customerName")
+       VALUES ($1, $2, NOW(), $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)`,
+      [logEntry.id, logEntry.recordId, logEntry.user, logEntry.userRole, logEntry.action,
+       JSON.stringify(logEntry.recordData), JSON.stringify(logEntry.details), logEntry.billNumber, logEntry.customerName]
+    );
   }
 }
 
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    let query = 'SELECT * FROM customer_records WHERE 1=1';
+    let queryText = 'SELECT * FROM customer_records WHERE 1=1';
     const params = [];
 
     const { filterType, filterStatus, minAmount, maxAmount, pendingFilter, sortBy, searchType, searchValue } = req.query;
 
     if (filterType) {
-      query += ' AND itemType = ?';
+      queryText += ' AND "itemType" = $' + (params.length + 1);
       params.push(filterType);
     }
     if (filterStatus) {
       if (filterStatus === 'active') {
-        query += " AND (status IS NULL OR status = 'active')";
+        queryText += " AND (status IS NULL OR status = 'active')";
       } else {
-        query += ' AND status = ?';
+        queryText += ' AND status = $' + (params.length + 1);
         params.push(filterStatus);
       }
     }
     if (minAmount) {
-      query += ' AND itemAmount >= ?';
+      queryText += ' AND "itemAmount" >= $' + (params.length + 1);
       params.push(parseFloat(minAmount));
     }
     if (maxAmount) {
-      query += ' AND itemAmount <= ?';
+      queryText += ' AND "itemAmount" <= $' + (params.length + 1);
       params.push(parseFloat(maxAmount));
     }
     if (pendingFilter === 'pending') {
-      query += ' AND pendingMoney > 0';
+      queryText += ' AND "pendingMoney" > 0';
     } else if (pendingFilter === 'no-pending') {
-      query += ' AND (pendingMoney IS NULL OR pendingMoney = 0)';
+      queryText += ' AND ("pendingMoney" IS NULL OR "pendingMoney" = 0)';
     }
 
     if (searchValue) {
       if (searchType === 'billNo') {
-        query += ' AND (billNo LIKE ?)';
+        queryText += ' AND ("billNo" ILIKE $' + (params.length + 1) + ')';
         params.push(`%${searchValue}%`);
       } else if (searchType) {
-        query += ` AND ${searchType} LIKE ?`;
+        queryText += ' AND "' + searchType + '" ILIKE $' + (params.length + 1);
         params.push(`%${searchValue}%`);
       }
     }
 
     switch (sortBy) {
-      case 'oldest': query += ' ORDER BY createdAt ASC'; break;
-      case 'amount-high': query += ' ORDER BY itemAmount DESC'; break;
-      case 'amount-low': query += ' ORDER BY itemAmount ASC'; break;
-      case 'name': query += ' ORDER BY customerName ASC'; break;
-      case 'pending-high': query += ' ORDER BY pendingMoney DESC'; break;
-      default: query += ' ORDER BY createdAt DESC';
+      case 'oldest': queryText += ' ORDER BY "createdAt" ASC'; break;
+      case 'amount-high': queryText += ' ORDER BY "itemAmount" DESC'; break;
+      case 'amount-low': queryText += ' ORDER BY "itemAmount" ASC'; break;
+      case 'name': queryText += ' ORDER BY "customerName" ASC'; break;
+      case 'pending-high': queryText += ' ORDER BY "pendingMoney" DESC'; break;
+      default: queryText += ' ORDER BY "createdAt" DESC';
     }
 
-    const records = db.prepare(query).all(...params);
-    const parsed = records.map(r => ({
+    const result = await db.query(queryText, params);
+    const records = result.rows.map(r => ({
       ...r,
-      extraMoney: JSON.parse(r.extraMoney || '[]'),
-      moneyBack: JSON.parse(r.moneyBack || '[]')
+      extraMoney: r.extraMoney || [],
+      moneyBack: r.moneyBack || []
     }));
 
-    res.json(parsed);
+    res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const {
       billNo, billDate, customerName, phoneNumber, address,
@@ -108,8 +115,8 @@ router.post('/', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Please fill all required fields' });
     }
 
-    const existing = db.prepare('SELECT id FROM customer_records WHERE billNo = ?').get(billNo);
-    if (existing) {
+    const existing = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1', [billNo]);
+    if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Bill number already exists' });
     }
 
@@ -130,22 +137,30 @@ router.post('/', authenticateToken, (req, res) => {
       notes: notes || '',
       pendingMoney: parseFloat(pendingMoney) || 0,
       extraMoneyCount: parseInt(extraMoneyCount) || 0,
-      extraMoney: JSON.stringify(extraMoney || []),
+      extraMoney: extraMoney || [],
       moneyBackCount: parseInt(moneyBackCount) || 0,
-      moneyBack: JSON.stringify(moneyBack || []),
+      moneyBack: moneyBack || [],
       status: 'active',
       createdAt: new Date().toISOString(),
       createdBy: req.user.username
     };
 
-    db.prepare(`INSERT INTO customer_records (id, billNo, billDate, customerName, phoneNumber, address, itemName, itemType, itemAmount, interest, weight, purity, notes, pendingMoney, extraMoneyCount, extraMoney, moneyBackCount, moneyBack, status, createdAt, createdBy)
-      VALUES (@id, @billNo, @billDate, @customerName, @phoneNumber, @address, @itemName, @itemType, @itemAmount, @interest, @weight, @purity, @notes, @pendingMoney, @extraMoneyCount, @extraMoney, @moneyBackCount, @moneyBack, @status, @createdAt, @createdBy)`).run(record);
+    await db.query(
+      `INSERT INTO customer_records (id, "billNo", "billDate", "customerName", "phoneNumber", address, "itemName", "itemType", "itemAmount", interest, weight, purity, notes, "pendingMoney", "extraMoneyCount", "extraMoney", "moneyBackCount", "moneyBack", status, "createdAt", "createdBy")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18::jsonb, $19, $20, $21)`,
+      [record.id, record.billNo, record.billDate, record.customerName, record.phoneNumber,
+       record.address, record.itemName, record.itemType, record.itemAmount, record.interest,
+       record.weight, record.purity, record.notes, record.pendingMoney, record.extraMoneyCount,
+       JSON.stringify(record.extraMoney), record.moneyBackCount, JSON.stringify(record.moneyBack),
+       record.status, record.createdAt, record.createdBy]
+    );
 
-    const createdRecord = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(id);
-    createdRecord.extraMoney = JSON.parse(createdRecord.extraMoney || '[]');
-    createdRecord.moneyBack = JSON.parse(createdRecord.moneyBack || '[]');
+    const createdResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [id]);
+    const createdRecord = createdResult.rows[0];
+    createdRecord.extraMoney = createdRecord.extraMoney || [];
+    createdRecord.moneyBack = createdRecord.moneyBack || [];
 
-    addAuditLog('CREATE', id, createdRecord, {
+    await addAuditLog(db.query, 'CREATE', id, createdRecord, {
       message: `New customer record created: ${customerName}`,
       itemType, amount: itemAmount
     }, req.user);
@@ -156,12 +171,12 @@ router.post('/', authenticateToken, (req, res) => {
   }
 });
 
-router.get('/next-bill-no', authenticateToken, (req, res) => {
+router.get('/next-bill-no', authenticateToken, async (req, res) => {
   try {
-    const last = db.prepare("SELECT billNo FROM customer_records ORDER BY CAST(REPLACE(billNo, 'BILL', '') AS INTEGER) DESC LIMIT 1").get();
+    const result = await db.query(`SELECT "billNo" FROM customer_records ORDER BY CAST(REGEXP_REPLACE("billNo", '\\D', '', 'g') AS INTEGER) DESC LIMIT 1`);
     let next = 1;
-    if (last) {
-      const num = parseInt(last.billNo.replace(/\D/g, ''));
+    if (result.rows.length > 0) {
+      const num = parseInt(result.rows[0].billNo.replace(/\D/g, ''));
       next = (num || 0) + 1;
     }
     res.json({ nextBillNo: next });
@@ -170,21 +185,23 @@ router.get('/next-bill-no', authenticateToken, (req, res) => {
   }
 });
 
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const record = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(req.params.id);
+    const result = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const record = result.rows[0];
     if (!record) return res.status(404).json({ error: 'Record not found' });
-    record.extraMoney = JSON.parse(record.extraMoney || '[]');
-    record.moneyBack = JSON.parse(record.moneyBack || '[]');
+    record.extraMoney = record.extraMoney || [];
+    record.moneyBack = record.moneyBack || [];
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const oldRecord = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(req.params.id);
+    const oldResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const oldRecord = oldResult.rows[0];
     if (!oldRecord) return res.status(404).json({ error: 'Record not found' });
 
     const {
@@ -197,25 +214,27 @@ router.put('/:id', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Please fill all required fields' });
     }
 
-    const dup = db.prepare('SELECT id FROM customer_records WHERE billNo = ? AND id != ?').get(billNo, req.params.id);
-    if (dup) return res.status(400).json({ error: 'Bill number already exists' });
+    const dup = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1 AND id != $2', [billNo, req.params.id]);
+    if (dup.rows.length > 0) return res.status(400).json({ error: 'Bill number already exists' });
 
-    db.prepare(`UPDATE customer_records SET
-      billNo = ?, billDate = ?, customerName = ?, phoneNumber = ?, address = ?,
-      itemName = ?, itemType = ?, itemAmount = ?, interest = ?, weight = ?, purity = ?,
-      notes = ?, pendingMoney = ?, extraMoneyCount = ?, extraMoney = ?,
-      moneyBackCount = ?, moneyBack = ?, status = ?, updatedAt = datetime('now')
-      WHERE id = ?`).run(
-      billNo.trim(), billDate || '', customerName.trim(), phoneNumber || '', address.trim(),
-      itemName.trim(), itemType, parseFloat(itemAmount), parseFloat(interest), parseFloat(weight), purity || '',
-      notes || '', parseFloat(pendingMoney) || 0, parseInt(extraMoneyCount) || 0, JSON.stringify(extraMoney || []),
-      parseInt(moneyBackCount) || 0, JSON.stringify(moneyBack || []), status || oldRecord.status,
-      req.params.id
+    await db.query(
+      `UPDATE customer_records SET
+        "billNo" = $1, "billDate" = $2, "customerName" = $3, "phoneNumber" = $4, address = $5,
+        "itemName" = $6, "itemType" = $7, "itemAmount" = $8, interest = $9, weight = $10, purity = $11,
+        notes = $12, "pendingMoney" = $13, "extraMoneyCount" = $14, "extraMoney" = $15::jsonb,
+        "moneyBackCount" = $16, "moneyBack" = $17::jsonb, status = $18, "updatedAt" = NOW()
+       WHERE id = $19`,
+      [billNo.trim(), billDate || '', customerName.trim(), phoneNumber || '', address.trim(),
+       itemName.trim(), itemType, parseFloat(itemAmount), parseFloat(interest), parseFloat(weight), purity || '',
+       notes || '', parseFloat(pendingMoney) || 0, parseInt(extraMoneyCount) || 0, JSON.stringify(extraMoney || []),
+       parseInt(moneyBackCount) || 0, JSON.stringify(moneyBack || []), status || oldRecord.status,
+       req.params.id]
     );
 
-    const updated = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(req.params.id);
-    updated.extraMoney = JSON.parse(updated.extraMoney || '[]');
-    updated.moneyBack = JSON.parse(updated.moneyBack || '[]');
+    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const updated = updatedResult.rows[0];
+    updated.extraMoney = updated.extraMoney || [];
+    updated.moneyBack = updated.moneyBack || [];
 
     const changes = [];
     if (oldRecord.customerName !== updated.customerName) changes.push(`customerName: "${oldRecord.customerName}" → "${updated.customerName}"`);
@@ -223,7 +242,7 @@ router.put('/:id', authenticateToken, (req, res) => {
     if (oldRecord.status !== updated.status) changes.push(`status: "${oldRecord.status}" → "${updated.status}"`);
     if (oldRecord.pendingMoney !== updated.pendingMoney) changes.push(`pendingMoney: "${oldRecord.pendingMoney}" → "${updated.pendingMoney}"`);
 
-    addAuditLog('UPDATE', req.params.id, updated, {
+    await addAuditLog(db.query, 'UPDATE', req.params.id, updated, {
       message: `Record updated: ${updated.customerName}`,
       changes, previousData: oldRecord
     }, req.user);
@@ -234,24 +253,31 @@ router.put('/:id', authenticateToken, (req, res) => {
   }
 });
 
-router.delete('/bulk-delete', authenticateToken, (req, res) => {
+router.delete('/bulk-delete', authenticateToken, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ error: 'No record IDs provided' });
 
-    const deleteStmt = db.prepare('DELETE FROM customer_records WHERE id = ?');
-    const deleteMany = db.transaction((ids) => {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
       for (const id of ids) {
-        const record = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(id);
+        const recResult = await client.query('SELECT * FROM customer_records WHERE id = $1', [id]);
+        const record = recResult.rows[0];
         if (record) {
-          addAuditLog('DELETE', id, record, {
+          await addAuditLog(client.query, 'DELETE', id, record, {
             message: `Bulk delete: ${record.customerName}`, billNumber: record.billNo
           }, req.user);
-          deleteStmt.run(id);
+          await client.query('DELETE FROM customer_records WHERE id = $1', [id]);
         }
       }
-    });
-    deleteMany(ids);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
     res.json({ message: `${ids.length} record(s) deleted` });
   } catch (err) {
@@ -259,25 +285,32 @@ router.delete('/bulk-delete', authenticateToken, (req, res) => {
   }
 });
 
-router.post('/bulk-mark-sold', authenticateToken, (req, res) => {
+router.post('/bulk-mark-sold', authenticateToken, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ error: 'No record IDs provided' });
 
-    const updateStmt = db.prepare("UPDATE customer_records SET status = 'sold', soldAt = datetime('now'), updatedAt = datetime('now') WHERE id = ?");
-    const updateMany = db.transaction((ids) => {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
       for (const id of ids) {
-        const record = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(id);
+        const recResult = await client.query('SELECT * FROM customer_records WHERE id = $1', [id]);
+        const record = recResult.rows[0];
         if (record) {
-          addAuditLog('MARK_SOLD', id, record, {
+          await addAuditLog(client.query, 'MARK_SOLD', id, record, {
             message: `Bulk mark sold: ${record.customerName}`,
             previousStatus: record.status || 'active'
           }, req.user);
-          updateStmt.run(id);
+          await client.query("UPDATE customer_records SET status = 'sold', \"soldAt\" = NOW(), \"updatedAt\" = NOW() WHERE id = $1", [id]);
         }
       }
-    });
-    updateMany(ids);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
     res.json({ message: `${ids.length} record(s) marked as sold` });
   } catch (err) {
@@ -285,122 +318,122 @@ router.post('/bulk-mark-sold', authenticateToken, (req, res) => {
   }
 });
 
-router.post('/:id/mark-sold', authenticateToken, (req, res) => {
+router.post('/:id/mark-sold', authenticateToken, async (req, res) => {
   try {
-    const record = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(req.params.id);
+    const recResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const record = recResult.rows[0];
     if (!record) return res.status(404).json({ error: 'Record not found' });
 
-    addAuditLog('MARK_SOLD', req.params.id, record, {
+    await addAuditLog(db.query, 'MARK_SOLD', req.params.id, record, {
       message: `Record marked as sold: ${record.customerName}`,
       previousStatus: record.status || 'active'
     }, req.user);
 
-    db.prepare("UPDATE customer_records SET status = 'sold', soldAt = datetime('now'), updatedAt = datetime('now') WHERE id = ?").run(req.params.id);
+    await db.query("UPDATE customer_records SET status = 'sold', \"soldAt\" = NOW(), \"updatedAt\" = NOW() WHERE id = $1", [req.params.id]);
 
-    const updated = db.prepare('SELECT * FROM customer_records WHERE id = ?').get(req.params.id);
-    updated.extraMoney = JSON.parse(updated.extraMoney || '[]');
-    updated.moneyBack = JSON.parse(updated.moneyBack || '[]');
+    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const updated = updatedResult.rows[0];
+    updated.extraMoney = updated.extraMoney || [];
+    updated.moneyBack = updated.moneyBack || [];
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/:id/history', authenticateToken, (req, res) => {
+router.get('/:id/history', authenticateToken, async (req, res) => {
   try {
-    const history = db.prepare('SELECT * FROM record_histories WHERE recordId = ? ORDER BY timestamp DESC').all(req.params.id);
-    const parsed = history.map(h => ({ ...h, details: JSON.parse(h.details || '{}'), recordData: JSON.parse(h.recordData || '{}') }));
-    res.json(parsed);
+    const result = await db.query('SELECT * FROM record_histories WHERE "recordId" = $1 ORDER BY timestamp DESC', [req.params.id]);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/audit-logs/all', authenticateToken, adminOnly, (req, res) => {
+router.get('/audit-logs/all', authenticateToken, adminOnly, async (req, res) => {
   try {
-    let query = 'SELECT * FROM audit_logs WHERE 1=1';
+    let queryText = 'SELECT * FROM audit_logs WHERE 1=1';
     const params = [];
 
     const { actionFilter, userFilter, dateFilter } = req.query;
-    if (actionFilter) { query += ' AND action = ?'; params.push(actionFilter); }
-    if (userFilter) { query += ' AND user = ?'; params.push(userFilter); }
-    if (dateFilter) { query += " AND date(timestamp) = date(?)"; params.push(dateFilter); }
+    if (actionFilter) { queryText += ' AND action = $' + (params.length + 1); params.push(actionFilter); }
+    if (userFilter) { queryText += ' AND "user" = $' + (params.length + 1); params.push(userFilter); }
+    if (dateFilter) { queryText += ' AND timestamp::date = $' + (params.length + 1) + '::date'; params.push(dateFilter); }
 
-    query += ' ORDER BY timestamp DESC';
-    const logs = db.prepare(query).all(...params);
-    const parsed = logs.map(l => ({ ...l, details: JSON.parse(l.details || '{}'), recordData: JSON.parse(l.recordData || '{}') }));
-    res.json(parsed);
+    queryText += ' ORDER BY timestamp DESC';
+    const result = await db.query(queryText, params);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/audit-logs/users', authenticateToken, adminOnly, (req, res) => {
+router.get('/audit-logs/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const users = db.prepare('SELECT DISTINCT user FROM audit_logs ORDER BY user').all();
-    res.json(users.map(u => u.user));
+    const result = await db.query('SELECT DISTINCT "user" FROM audit_logs ORDER BY "user"');
+    res.json(result.rows.map(u => u.user));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/analytics/summary', authenticateToken, (req, res) => {
+router.get('/analytics/summary', authenticateToken, async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
     let dateFilter = '';
     const params = [];
-    if (dateFrom) { dateFilter += ' AND DATE(createdAt) >= DATE(?)'; params.push(dateFrom); }
-    if (dateTo) { dateFilter += ' AND DATE(createdAt) <= DATE(?)'; params.push(dateTo); }
+    if (dateFrom) { dateFilter += ' AND "createdAt"::date >= $' + (params.length + 1) + '::date'; params.push(dateFrom); }
+    if (dateTo) { dateFilter += ' AND "createdAt"::date <= $' + (params.length + 1) + '::date'; params.push(dateTo); }
 
-    const totalRecords = db.prepare(`SELECT COUNT(*) as count FROM customer_records WHERE 1=1 ${dateFilter}`).get(...params);
-    const totalActive = db.prepare(`SELECT COUNT(*) as count FROM customer_records WHERE (status IS NULL OR status = 'active') ${dateFilter}`).get(...params);
-    const totalSold = db.prepare(`SELECT COUNT(*) as count FROM customer_records WHERE status = 'sold' ${dateFilter}`).get(...params);
-    const totalAmount = db.prepare(`SELECT COALESCE(SUM(itemAmount), 0) as total FROM customer_records WHERE 1=1 ${dateFilter}`).get(...params);
-    const totalPending = db.prepare(`SELECT COALESCE(SUM(pendingMoney), 0) as total FROM customer_records WHERE 1=1 ${dateFilter}`).get(...params);
-    const goldCount = db.prepare(`SELECT COUNT(*) as count FROM customer_records WHERE itemType = 'Gold' ${dateFilter}`).get(...params);
-    const silverCount = db.prepare(`SELECT COUNT(*) as count FROM customer_records WHERE itemType = 'Silver' ${dateFilter}`).get(...params);
+    const totalRecords = await db.query(`SELECT COUNT(*) as count FROM customer_records WHERE 1=1 ${dateFilter}`, params);
+    const totalActive = await db.query(`SELECT COUNT(*) as count FROM customer_records WHERE (status IS NULL OR status = 'active') ${dateFilter}`, params);
+    const totalSold = await db.query(`SELECT COUNT(*) as count FROM customer_records WHERE status = 'sold' ${dateFilter}`, params);
+    const totalAmount = await db.query(`SELECT COALESCE(SUM("itemAmount"), 0) as total FROM customer_records WHERE 1=1 ${dateFilter}`, params);
+    const totalPending = await db.query(`SELECT COALESCE(SUM("pendingMoney"), 0) as total FROM customer_records WHERE 1=1 ${dateFilter}`, params);
+    const goldCount = await db.query(`SELECT COUNT(*) as count FROM customer_records WHERE "itemType" = 'Gold' ${dateFilter}`, params);
+    const silverCount = await db.query(`SELECT COUNT(*) as count FROM customer_records WHERE "itemType" = 'Silver' ${dateFilter}`, params);
 
     res.json({
-      totalRecords: totalRecords.count,
-      totalActive: totalActive.count,
-      totalSold: totalSold.count,
-      totalAmount: totalAmount.total,
-      totalPending: totalPending.total,
-      goldCount: goldCount.count,
-      silverCount: silverCount.count
+      totalRecords: parseInt(totalRecords.rows[0].count),
+      totalActive: parseInt(totalActive.rows[0].count),
+      totalSold: parseInt(totalSold.rows[0].count),
+      totalAmount: parseFloat(totalAmount.rows[0].total),
+      totalPending: parseFloat(totalPending.rows[0].total),
+      goldCount: parseInt(goldCount.rows[0].count),
+      silverCount: parseInt(silverCount.rows[0].count)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/analytics/chart', authenticateToken, (req, res) => {
+router.get('/analytics/chart', authenticateToken, async (req, res) => {
   try {
     const { dateFrom, dateTo, chartType } = req.query;
     let dateFilter = '';
     const params = [];
-    if (dateFrom) { dateFilter += ' AND DATE(createdAt) >= DATE(?)'; params.push(dateFrom); }
-    if (dateTo) { dateFilter += ' AND DATE(createdAt) <= DATE(?)'; params.push(dateTo); }
+    if (dateFrom) { dateFilter += ' AND "createdAt"::date >= $' + (params.length + 1) + '::date'; params.push(dateFrom); }
+    if (dateTo) { dateFilter += ' AND "createdAt"::date <= $' + (params.length + 1) + '::date'; params.push(dateTo); }
 
     if (chartType === 'sales') {
-      const data = db.prepare(`SELECT DATE(createdAt) as label, COUNT(*) as count, COALESCE(SUM(itemAmount), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY DATE(createdAt) ORDER BY label`).all(...params);
-      return res.json(data);
+      const result = await db.query(`SELECT "createdAt"::date as label, COUNT(*) as count, COALESCE(SUM("itemAmount"), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY "createdAt"::date ORDER BY label`, params);
+      return res.json(result.rows);
     }
     if (chartType === 'itemType') {
-      const data = db.prepare(`SELECT itemType as label, COUNT(*) as count, COALESCE(SUM(itemAmount), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY itemType`).all(...params);
-      return res.json(data);
+      const result = await db.query(`SELECT "itemType" as label, COUNT(*) as count, COALESCE(SUM("itemAmount"), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY "itemType"`, params);
+      return res.json(result.rows);
     }
     if (chartType === 'status') {
-      const data = db.prepare(`SELECT COALESCE(status, 'active') as label, COUNT(*) as count, COALESCE(SUM(itemAmount), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY label`).all(...params);
-      return res.json(data);
+      const result = await db.query(`SELECT COALESCE(status, 'active') as label, COUNT(*) as count, COALESCE(SUM("itemAmount"), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY label`, params);
+      return res.json(result.rows);
     }
     if (chartType === 'pending') {
-      const data = db.prepare(`SELECT customerName as label, pendingMoney as amount, billNo FROM customer_records WHERE pendingMoney > 0 ${dateFilter} ORDER BY pendingMoney DESC LIMIT 20`).all(...params);
-      return res.json(data);
+      const result = await db.query(`SELECT "customerName" as label, "pendingMoney" as amount, "billNo" FROM customer_records WHERE "pendingMoney" > 0 ${dateFilter} ORDER BY "pendingMoney" DESC LIMIT 20`, params);
+      return res.json(result.rows);
     }
     if (chartType === 'monthly') {
-      const data = db.prepare(`SELECT strftime('%Y-%m', createdAt) as label, COUNT(*) as count, COALESCE(SUM(itemAmount), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY label ORDER BY label`).all(...params);
-      return res.json(data);
+      const result = await db.query(`SELECT TO_CHAR("createdAt", 'YYYY-MM') as label, COUNT(*) as count, COALESCE(SUM("itemAmount"), 0) as amount FROM customer_records WHERE 1=1 ${dateFilter} GROUP BY label ORDER BY label`, params);
+      return res.json(result.rows);
     }
 
     res.json([]);
@@ -409,7 +442,7 @@ router.get('/analytics/chart', authenticateToken, (req, res) => {
   }
 });
 
-router.post('/import-excel', authenticateToken, upload.single('file'), (req, res) => {
+router.post('/import-excel', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -422,42 +455,47 @@ router.post('/import-excel', authenticateToken, upload.single('file'), (req, res
     const imported = [];
     const errors = [];
 
-    const insertStmt = db.prepare(`INSERT OR IGNORE INTO customer_records
-      (id, billNo, billDate, customerName, phoneNumber, address, itemName, itemType, itemAmount, interest, weight, purity, notes, pendingMoney, extraMoneyCount, extraMoney, moneyBackCount, moneyBack, status, createdAt, createdBy)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
-    const insertMany = db.transaction(() => {
-      jsonData.forEach((row, index) => {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      for (let index = 0; index < jsonData.length; index++) {
+        const row = jsonData[index];
         try {
           const billNo = (row['Bill Number'] || '').toString().trim();
-          if (!billNo) { errors.push(`Row ${index + 2}: Missing Bill Number`); return; }
+          if (!billNo) { errors.push(`Row ${index + 2}: Missing Bill Number`); continue; }
 
-          const existing = db.prepare('SELECT id FROM customer_records WHERE billNo = ?').get(billNo);
-          if (existing) { errors.push(`Row ${index + 2}: Bill ${billNo} already exists`); return; }
+          const existing = await client.query('SELECT id FROM customer_records WHERE "billNo" = $1', [billNo]);
+          if (existing.rows.length > 0) { errors.push(`Row ${index + 2}: Bill ${billNo} already exists`); continue; }
 
           const itemType = (row['Item Type'] || '').toString().trim();
-          if (itemType !== 'Gold' && itemType !== 'Silver') { errors.push(`Row ${index + 2}: Item type must be Gold/Silver`); return; }
+          if (itemType !== 'Gold' && itemType !== 'Silver') { errors.push(`Row ${index + 2}: Item type must be Gold/Silver`); continue; }
 
           const id = uuidv4();
-          insertStmt.run(
-            id, billNo, row['Bill Date'] || '', (row['Customer Name'] || '').toString().trim(),
-            (row['Phone Number'] || '').toString().trim(), (row['Address'] || '').toString().trim(),
-            (row['Item Name'] || '').toString().trim(), itemType,
-            parseFloat(row['Item Amount']) || 0, parseFloat(row['Interest (%)']) || 0,
-            parseFloat(row['Weight (grams)']) || 0, (row['Purity'] || '').toString().trim(),
-            (row['Notes'] || '').toString().trim(), parseFloat(row['Pending Money']) || 0,
-            parseInt(row['Extra Money Count']) || 0, '[]', parseInt(row['Money Back Count']) || 0, '[]',
-            ((row['Status'] || 'active').toString().toLowerCase() === 'sold' ? 'sold' : 'active'),
-            new Date().toISOString(), req.user.username
+          await client.query(
+            `INSERT INTO customer_records (id, "billNo", "billDate", "customerName", "phoneNumber", address, "itemName", "itemType", "itemAmount", interest, weight, purity, notes, "pendingMoney", "extraMoneyCount", "extraMoney", "moneyBackCount", "moneyBack", status, "createdAt", "createdBy")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18::jsonb, $19, $20, $21)`,
+            [id, billNo, row['Bill Date'] || '', (row['Customer Name'] || '').toString().trim(),
+             (row['Phone Number'] || '').toString().trim(), (row['Address'] || '').toString().trim(),
+             (row['Item Name'] || '').toString().trim(), itemType,
+             parseFloat(row['Item Amount']) || 0, parseFloat(row['Interest (%)']) || 0,
+             parseFloat(row['Weight (grams)']) || 0, (row['Purity'] || '').toString().trim(),
+             (row['Notes'] || '').toString().trim(), parseFloat(row['Pending Money']) || 0,
+             parseInt(row['Extra Money Count']) || 0, '[]', parseInt(row['Money Back Count']) || 0, '[]',
+             ((row['Status'] || 'active').toString().toLowerCase() === 'sold' ? 'sold' : 'active'),
+             new Date().toISOString(), req.user.username]
           );
           imported.push(billNo);
         } catch (e) {
           errors.push(`Row ${index + 2}: ${e.message}`);
         }
-      });
-    });
-
-    insertMany();
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
     res.json({
       imported: imported.length,
@@ -470,10 +508,10 @@ router.post('/import-excel', authenticateToken, upload.single('file'), (req, res
   }
 });
 
-router.get('/export-excel', authenticateToken, (req, res) => {
+router.get('/export-excel', authenticateToken, async (req, res) => {
   try {
-    const records = db.prepare('SELECT * FROM customer_records ORDER BY createdAt DESC').all();
-    const excelData = records.map(r => ({
+    const result = await db.query('SELECT * FROM customer_records ORDER BY "createdAt" DESC');
+    const excelData = result.rows.map(r => ({
       'Bill Number': r.billNo,
       'Bill Date': r.billDate || '',
       'Customer Name': r.customerName,
