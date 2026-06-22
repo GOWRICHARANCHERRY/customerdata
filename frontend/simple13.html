@@ -149,15 +149,30 @@
     .search-btn { background: #17a2b8; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: bold; height: fit-content; }
     .search-btn:hover { background: #138496; }
 
+    .sold-badge {
+      display: inline-block;
+      background: #dc3545;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
     .extra-money-section { background: #f8f9fa; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #28a745; }
     .money-back-section { background: #fff3e0; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #ff9800; }
     .extra-money-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
     button { margin-top: 15px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
     button:hover { background: #0056b3; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
 
     .action-buttons { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
     .sold-btn { background: #6f42c1; color: white; }
     .sold-btn:hover { background: #5a2d91; }
+    .sold-btn:disabled { background: #ccc; color: #666; }
+    .history-btn { background: #17a2b8; color: white; }
+    .history-btn:hover { background: #138496; }
 
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     table, th, td { border: 1px solid #ccc; }
@@ -170,6 +185,37 @@
     .print-btn { margin-top: 20px; background: #28a745; }
     .total-row { font-weight: bold; background: #fff3cd; }
     .payment-row { background: #ffe0b3; color: #d84315; }
+
+    .history-entry {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 15px;
+      margin-bottom: 12px;
+      border-radius: 5px;
+    }
+    .history-entry .entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .history-entry .entry-action {
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .history-entry .entry-time {
+      color: #666;
+      font-size: 13px;
+    }
+    .history-entry .entry-details {
+      color: #333;
+      font-size: 14px;
+    }
+    .history-entry .entry-user {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
 
     @media print {
       .header, .modal { display: none !important; }
@@ -236,6 +282,16 @@
     </div>
   </div>
 
+  <div id="historyModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📜 Bill History</h3>
+        <span class="close" onclick="closeHistoryModal()">&times;</span>
+      </div>
+      <div id="historyContent"><p>Loading history...</p></div>
+    </div>
+  </div>
+
   <div class="container">
     <h2>Lakshmi Narsima Pan broker Interest Calculator</h2>
 
@@ -247,12 +303,15 @@
       <button class="search-btn" onclick="searchBillNumber()">Search</button>
     </div>
 
+    <div id="soldStatusContainer" style="display: none; margin-bottom: 15px;"></div>
+
     <h3>Principal Amount Details</h3>
     <label>Principal Amount:</label>
-    <input type="number" id="amount" placeholder="Enter amount">
+    <input type="number" id="amount" placeholder="Enter amount" onchange="autoSetInterestRate()">
 
     <label>Monthly Interest Rate (%):</label>
-    <input type="number" id="rate" placeholder="Enter monthly interest %">
+    <input type="number" id="rate" placeholder="Enter monthly interest %" readonly style="background: #f0f0f0;">
+    <small id="rateHint" style="color: #666; display: block; margin-top: 3px;"></small>
 
     <label>Start Date:</label>
     <input type="date" id="startDate">
@@ -284,7 +343,7 @@
 
     <div class="action-buttons">
       <button onclick="calculateInterest()">Calculate</button>
-      <button class="sold-btn" onclick="markAsSold()">Sold</button>
+      <button id="soldButton" class="sold-btn" onclick="markAsSold()">Sold</button>
     </div>
 
     <div id="transactionManager" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #007bff;">
@@ -321,7 +380,10 @@
       <div id="result"></div>
     </div>
 
-    <button class="print-btn" onclick="window.print()">Print Bill</button>
+    <div style="display: flex; gap: 10px; margin-top: 10px;">
+      <button class="print-btn" onclick="window.print()">🖨️ Print Bill</button>
+      <button class="history-btn" onclick="showHistory()">📜 History</button>
+    </div>
   </div>
 
   <script>
@@ -361,6 +423,7 @@
 
     let pendingTransactions = { extraMoney: [], moneyBack: [], pendingMoney: null };
     let currentSearchedRecordId = null;
+    let currentSearchedRecordStatus = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       checkAuthentication();
@@ -393,6 +456,26 @@
       window.location.href = 'login.html';
     }
 
+    function autoSetInterestRate() {
+      const amount = parseFloat(document.getElementById('amount').value);
+      const rateInput = document.getElementById('rate');
+      const rateHint = document.getElementById('rateHint');
+      const itemType = document.getElementById('itemTypeDisplay')?.value;
+
+      if (!amount || amount <= 0) return;
+
+      if (itemType === 'Silver') {
+        rateInput.value = '3';
+        rateHint.textContent = 'Auto-set: 3% for Silver items';
+      } else if (amount < 10000) {
+        rateInput.value = '2.5';
+        rateHint.textContent = 'Auto-set: 2.5% for amounts under ₹10,000';
+      } else {
+        rateInput.value = '2';
+        rateHint.textContent = 'Auto-set: 2% for amounts ₹10,000 and above';
+      }
+    }
+
     async function searchBillNumber() {
       const billNumber = document.getElementById('billNumber').value.trim();
       if (!billNumber) { alert('Please enter a bill number to search.'); return; }
@@ -400,6 +483,10 @@
       pendingTransactions = { extraMoney: [], moneyBack: [], pendingMoney: null };
       document.getElementById('transactionManager').style.display = 'none';
       currentSearchedRecordId = null;
+      currentSearchedRecordStatus = null;
+      document.getElementById('soldStatusContainer').style.display = 'none';
+      document.getElementById('soldButton').disabled = false;
+      document.getElementById('soldButton').textContent = 'Sold';
 
       try {
         const records = await apiRequest('/customers?searchType=billNo&searchValue=' + encodeURIComponent(billNumber));
@@ -408,7 +495,18 @@
         if (foundRecord) {
           populateCalculatorFromRecord(foundRecord);
           currentSearchedRecordId = foundRecord.id;
-          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName);
+          currentSearchedRecordStatus = foundRecord.status;
+
+          if (foundRecord.status === 'sold') {
+            document.getElementById('soldStatusContainer').style.display = 'block';
+            document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD</strong></div>';
+            document.getElementById('soldButton').disabled = true;
+            document.getElementById('soldButton').textContent = '✅ Already Sold';
+          }
+
+          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName + (foundRecord.status === 'sold' ? '\n⚠️ Status: SOLD' : ''));
+
+          calculateInterest();
         } else {
           alert('Bill number ' + billNumber + ' not found in Data Management System.\nPlease check the bill number or create a new record in the Data Entry system.');
         }
@@ -420,6 +518,24 @@
     function populateCalculatorFromRecord(record) {
       document.getElementById('amount').value = record.itemAmount || '';
       document.getElementById('rate').value = record.interest || '';
+
+      const itemType = record.itemType || '';
+      document.getElementById('rate').value = '';
+
+      const rateHint = document.getElementById('rateHint');
+      const amount = record.itemAmount || 0;
+
+      if (itemType === 'Silver') {
+        document.getElementById('rate').value = '3';
+        rateHint.textContent = 'Auto-set: 3% for Silver items';
+      } else if (amount < 10000) {
+        document.getElementById('rate').value = '2.5';
+        rateHint.textContent = 'Auto-set: 2.5% for amounts under ₹10,000';
+      } else {
+        document.getElementById('rate').value = record.interest || '2';
+        rateHint.textContent = record.interest ? '' : 'Auto-set: 2% for amounts ₹10,000 and above';
+      }
+
       document.getElementById('startDate').value = record.billDate || '';
 
       const today = new Date().toISOString().split('T')[0];
@@ -454,6 +570,14 @@
           if (dateField) dateField.value = back.paymentDate;
         });
       }
+
+      const hiddenType = document.createElement('input');
+      hiddenType.type = 'hidden';
+      hiddenType.id = 'itemTypeDisplay';
+      hiddenType.value = itemType;
+      const existing = document.getElementById('itemTypeDisplay');
+      if (existing) existing.value = itemType;
+      else document.getElementById('amount').parentNode.appendChild(hiddenType);
     }
 
     async function markAsSold() {
@@ -468,6 +592,12 @@
         if (record) {
           await apiRequest('/customers/' + record.id + '/mark-sold', { method: 'POST' });
           alert('Bill ' + billNumber + ' marked as SOLD!\n\nRecord updated in Data Management System.');
+          document.getElementById('soldButton').disabled = true;
+          document.getElementById('soldButton').textContent = '✅ Already Sold';
+          document.getElementById('soldStatusContainer').style.display = 'block';
+          document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD</strong></div>';
+          currentSearchedRecordStatus = 'sold';
+          calculateInterest();
         } else {
           alert('Bill ' + billNumber + ' not found in Data Management System.\n\nPlease ensure the bill exists in the data entry system.');
         }
@@ -548,8 +678,73 @@
     window.onclick = function(event) {
       const approvalModal = document.getElementById('approvalModal');
       const adminDashboardModal = document.getElementById('adminDashboardModal');
+      const historyModal = document.getElementById('historyModal');
       if (event.target == approvalModal) closeApprovalModal();
       if (event.target == adminDashboardModal) closeAdminDashboard();
+      if (event.target == historyModal) closeHistoryModal();
+    }
+
+    async function showHistory() {
+      if (!currentSearchedRecordId) {
+        alert('Please search for a bill number first.');
+        return;
+      }
+      document.getElementById('historyModal').style.display = 'block';
+      const content = document.getElementById('historyContent');
+      content.innerHTML = '<p>Loading history...</p>';
+
+      try {
+        const history = await apiRequest('/customers/' + currentSearchedRecordId + '/history');
+        if (!history || history.length === 0) {
+          content.innerHTML = '<p>No history available for this record.</p>';
+          return;
+        }
+
+        let html = '<div style="margin-bottom: 15px;"><strong>Bill Number:</strong> ' + document.getElementById('billNumber').value.trim() + '</div>';
+
+        const actionIcons = { 'CREATE': '✨', 'UPDATE': '✏️', 'DELETE': '🗑️', 'MARK_SOLD': '💰' };
+        const actionColors = { 'CREATE': '#28a745', 'UPDATE': '#ffc107', 'DELETE': '#dc3545', 'MARK_SOLD': '#17a2b8' };
+
+        history.forEach(entry => {
+          const date = new Date(entry.timestamp);
+          const icon = actionIcons[entry.action] || '📝';
+          const color = actionColors[entry.action] || '#6c757d';
+          const details = entry.details || {};
+          const changes = details.changes || [];
+
+          html += `
+            <div class="history-entry" style="border-left-color: ${color};">
+              <div class="entry-header">
+                <span class="entry-action" style="color: ${color};">${icon} ${entry.action.replace('_', ' ')}</span>
+                <span class="entry-time">${date.toLocaleString()}</span>
+              </div>
+              <div class="entry-details">${details.message || 'No details'}</div>
+              <div class="entry-user">👤 ${entry.user} ${entry.userRole === 'admin' ? '(Admin)' : ''}</div>
+          `;
+
+          if (changes.length > 0) {
+            html += '<div style="margin-top: 8px; padding-left: 15px;">';
+            changes.forEach(change => {
+              html += '<div style="font-size: 12px; color: #666;">• ' + change + '</div>';
+            });
+            html += '</div>';
+          }
+
+          if (details.bulkOperation) {
+            html += '<div style="font-size: 12px; color: #007bff; margin-top: 5px;">💼 Bulk operation (' + details.totalRecords + ' records)</div>';
+          }
+
+          html += '</div>';
+        });
+
+        content.innerHTML = html;
+      } catch (err) {
+        content.innerHTML = '<p>Error loading history.</p>';
+      }
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').style.display = 'none';
     }
 
     async function loadAdminDashboard() {
@@ -796,6 +991,8 @@
         document.getElementById('quickBackAmount').value = '';
         alert('Money back ₹' + amount + ' added to pending transactions.');
       }
+
+      calculateInterest();
     }
 
     function updatePendingMoney() {
@@ -803,6 +1000,7 @@
       if (amount === '') { alert('Please enter a pending amount.'); return; }
       pendingTransactions.pendingMoney = parseFloat(amount);
       alert('Pending money updated to ₹' + amount + '.');
+      calculateInterest();
     }
 
     async function saveAllTransactions() {
@@ -842,8 +1040,9 @@
         }
 
         pendingTransactions = { extraMoney: [], moneyBack: [], pendingMoney: null };
-        searchBillNumber();
         alert('All transactions saved successfully!');
+        await searchBillNumber();
+        calculateInterest();
       } catch (err) {
         alert('Error saving transactions.');
       }
@@ -869,31 +1068,62 @@
     function calculateInterest() {
       const billNumber = document.getElementById('billNumber').value;
       const principal = parseFloat(document.getElementById('amount').value);
-      const rate = parseFloat(document.getElementById('rate').value);
+      const baseRate = parseFloat(document.getElementById('rate').value);
       const start = new Date(document.getElementById('startDate').value);
       const end = new Date(document.getElementById('endDate').value);
       const extraCount = parseInt(document.getElementById('extraMoneyCount').value) || 0;
       const backCount = parseInt(document.getElementById('moneyBackCount').value) || 0;
 
-      if (!billNumber || isNaN(principal) || isNaN(rate) || !start || !end) {
-        alert("Please fill all principal amount fields correctly");
+      if (!billNumber || isNaN(principal) || isNaN(baseRate) || !start || !end) {
+        if (document.getElementById('rate').value) {
+          alert("Please fill all principal amount fields correctly");
+        }
         return;
       }
 
+      const itemType = document.getElementById('itemTypeDisplay')?.value || '';
+
       let billHeader = document.getElementById("billHeader");
-      billHeader.innerHTML = '<h3>Bill Number: ' + billNumber + '</h3>';
+      const soldStatus = currentSearchedRecordStatus === 'sold' ? ' <span class="sold-badge">SOLD</span>' : '';
+      billHeader.innerHTML = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
 
       let resultDiv = document.getElementById("result");
       resultDiv.innerHTML = "";
 
-      let principalResult = calculateSingleAmount("Principal Amount", principal, rate, start, end);
+      const totalExtraMoney = [];
+      for (let i = 1; i <= extraCount; i++) {
+        const amt = parseFloat(document.getElementById('extraAmount' + i).value);
+        const dt = document.getElementById('extraStartDate' + i).value;
+        if (!isNaN(amt) && dt) {
+          totalExtraMoney.push({ amount: amt, date: new Date(dt), index: i });
+        }
+      }
+      totalExtraMoney.sort((a, b) => a.date - b.date);
+
+      const totalPrincipal = principal + totalExtraMoney.reduce((s, e) => s + e.amount, 0);
+
+      let finalRate = baseRate;
+      let rateNote = '';
+
+      if (itemType === 'Silver') {
+        finalRate = 3;
+        rateNote = 'Rate: 3% (Silver item)';
+      } else if (totalPrincipal >= 10000) {
+        finalRate = 2;
+        rateNote = 'Rate: 2% (Total ₹' + totalPrincipal.toLocaleString() + ' ≥ ₹10,000)';
+      } else {
+        finalRate = 2.5;
+        rateNote = 'Rate: 2.5% (Total ₹' + totalPrincipal.toLocaleString() + ' < ₹10,000)';
+      }
+
+      let principalResult = calculateSingleAmount("Principal Amount", principal, finalRate, start, end);
       let allResults = [principalResult];
 
       for (let i = 1; i <= extraCount; i++) {
         const extraAmount = parseFloat(document.getElementById('extraAmount' + i).value);
         const extraStart = new Date(document.getElementById('extraStartDate' + i).value);
         if (!isNaN(extraAmount) && extraStart) {
-          let extraResult = calculateSingleAmount(getOrdinal(i) + ' Extra Money', extraAmount, rate, extraStart, end);
+          let extraResult = calculateSingleAmount(getOrdinal(i) + ' Extra Money', extraAmount, finalRate, extraStart, end);
           allResults.push(extraResult);
         }
       }
@@ -903,7 +1133,7 @@
         const backAmount = parseFloat(document.getElementById('backAmount' + i).value);
         const backDate = new Date(document.getElementById('backDate' + i).value);
         if (!isNaN(backAmount) && backDate) {
-          let paymentResult = calculatePayment(getOrdinal(i) + ' Payment', backAmount, rate, backDate, end);
+          let paymentResult = calculatePayment(getOrdinal(i) + ' Payment', backAmount, finalRate, backDate, end);
           paymentResults.push(paymentResult);
         }
       }
@@ -935,6 +1165,7 @@
 
       let summaryHTML = `
         <h3>Summary</h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 10px;">${rateNote}</p>
         <table class="summary-table">
           <tr><th>Description</th><th>Period</th><th>Principal</th><th>Total Interest</th><th>Final Amount</th></tr>
       `;
@@ -943,8 +1174,8 @@
         summaryHTML += '<tr><td>' + result.title + '</td><td>' + result.period + '</td><td>' + result.principal.toFixed(2) + '</td><td>' + result.totalInterest.toFixed(2) + '</td><td>' + result.finalAmount.toFixed(2) + '</td></tr>';
       });
 
-      let totalPrincipal = allResults.reduce((sum, result) => sum + result.principal, 0);
-      summaryHTML += '<tr class="total-row"><td><strong>TOTAL BORROWED</strong></td><td><strong>-</strong></td><td><strong>' + totalPrincipal.toFixed(2) + '</strong></td><td><strong>' + grandTotalInterest.toFixed(2) + '</strong></td><td><strong>' + grandTotalAmount.toFixed(2) + '</strong></td></tr>';
+      let totalPrincipalAll = allResults.reduce((sum, result) => sum + result.principal, 0);
+      summaryHTML += '<tr class="total-row"><td><strong>TOTAL BORROWED</strong></td><td><strong>-</strong></td><td><strong>' + totalPrincipalAll.toFixed(2) + '</strong></td><td><strong>' + grandTotalInterest.toFixed(2) + '</strong></td><td><strong>' + grandTotalAmount.toFixed(2) + '</strong></td></tr>';
 
       if (paymentResults.length > 0) {
         paymentResults.forEach(payment => {
