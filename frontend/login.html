@@ -297,6 +297,26 @@
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
+
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .container { padding: 25px; }
+            .logo h1 { font-size: 22px; }
+            .nav-info { padding: 12px; }
+            .btn-small { padding: 10px 14px; font-size: 14px; min-height: 44px; }
+            .user-actions { gap: 6px; }
+            .admin-section { padding: 15px; }
+        }
+
+        @media (max-width: 400px) {
+            .container { padding: 15px; }
+            .logo h1 { font-size: 18px; }
+            .logo p { font-size: 12px; }
+            .form-group input { padding: 12px; }
+            .btn { padding: 12px; }
+            .admin-section { padding: 10px; }
+            .admin-container { max-height: 90vh; }
+        }
     </style>
 </head>
 

@@ -223,6 +223,37 @@
       #printSection, #printSection * { visibility: visible; }
       #printSection { position: absolute; left: 0; top: 0; width: 100%; }
     }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .header { flex-wrap: wrap; gap: 10px; padding: 12px; }
+      .nav-menu { flex-wrap: wrap; gap: 6px; }
+      .user-info { width: 100%; justify-content: space-between; }
+      .nav-btn { padding: 6px 12px; font-size: 13px; }
+      .header-btn { padding: 6px 12px; font-size: 13px; }
+      .container { padding: 15px; }
+      h2 { font-size: 18px; }
+      input, select { font-size: 16px; padding: 10px; }
+      button { padding: 12px 18px; font-size: 15px; min-height: 44px; }
+      .search-btn { padding: 12px 14px; min-height: 44px; }
+      .extra-money-fields { grid-template-columns: 1fr; }
+      #transactionManager div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+      .bill-number-section { flex-direction: column; align-items: stretch; }
+      .action-buttons { flex-direction: column; }
+      .action-buttons button { width: 100%; }
+      .modal-content { margin: 10% auto; padding: 15px; width: 95%; }
+      table { font-size: 12px; display: block; overflow-x: auto; white-space: nowrap; }
+      th, td { padding: 6px 4px; font-size: 12px; }
+      .history-entry .entry-header { flex-direction: column; align-items: flex-start; gap: 5px; }
+      .sold-badge { font-size: 12px; padding: 3px 8px; }
+    }
+
+    @media (max-width: 400px) {
+      body { padding: 5px; }
+      .container { padding: 10px; }
+      h2 { font-size: 16px; }
+      .nav-btn { font-size: 12px; padding: 5px 8px; }
+    }
   </style>
 </head>
 <body>
