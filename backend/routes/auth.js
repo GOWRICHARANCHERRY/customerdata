@@ -6,16 +6,34 @@ const db = require('../db');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'customer-mgmt-secret-key-2024';
 
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    if (user.role !== 'admin') {
+      const result = await db.query('SELECT "loginFrom", "loginTo" FROM users WHERE username = $1', [user.username]);
+      if (result.rows.length > 0) {
+        const { loginFrom, loginTo } = result.rows[0];
+        if (loginFrom && loginTo) {
+          const now = new Date();
+          const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+          if (currentTime < loginFrom || currentTime > loginTo) {
+            return res.status(403).json({
+              error: 'Session expired due to login time restriction.',
+              timeRestricted: true
+            });
+          }
+        }
+      }
+    }
     req.user = user;
     next();
-  });
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
 }
 
 function adminOnly(req, res, next) {

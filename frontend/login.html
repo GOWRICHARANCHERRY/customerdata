@@ -480,12 +480,16 @@
             };
         }
 
-        function handleResponse(res) {
+        async function handleResponse(res) {
             if (res.status === 401 || res.status === 403) {
+                const data = await res.json().catch(() => ({}));
                 localStorage.removeItem('token');
                 localStorage.removeItem('currentUser');
                 showLoginForm();
-                throw new Error('Session expired. Please login again.');
+                if (data.timeRestricted) {
+                    showMessage('loginMessage', 'Session expired due to login time restriction.', 'error');
+                }
+                throw new Error(data.error || 'Session expired. Please login again.');
             }
             return res.json();
         }
@@ -500,6 +504,10 @@
                     window.location.href = 'simple13.html';
                 }
                 return;
+            }
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('timeRestricted') === '1') {
+                showMessage('loginMessage', 'Your session has expired due to login time restriction. Please try again during your allowed hours.', 'error');
             }
             document.getElementById('loginFormElement').addEventListener('submit', handleLogin);
             document.getElementById('signupFormElement').addEventListener('submit', handleSignup);

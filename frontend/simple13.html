@@ -434,10 +434,11 @@
         headers: { ...getAuthHeaders(), ...options.headers }
       });
       if (res.status === 401 || res.status === 403) {
+        const data = await res.json().catch(() => ({}));
         localStorage.removeItem('token');
         localStorage.removeItem('currentUser');
-        window.location.href = 'login.html';
-        throw new Error('Session expired');
+        window.location.href = 'login.html' + (data.timeRestricted ? '?timeRestricted=1' : '');
+        throw new Error(data.error || 'Session expired');
       }
       return res.json();
     }
