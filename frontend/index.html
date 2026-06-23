@@ -84,7 +84,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="itemType">Item Type *</label>
-                                <select id="itemType" required>
+                                <select id="itemType" required onchange="autoSetInterestRate()">
                                     <option value="">Select item type</option>
                                     <option value="Gold">Gold</option>
                                     <option value="Silver">Silver</option>
@@ -92,7 +92,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="itemAmount">Item Amount (₹) *</label>
-                                <input type="number" id="itemAmount" required step="0.01" placeholder="Enter amount">
+                                <input type="number" id="itemAmount" required step="0.01" placeholder="Enter amount" onchange="autoSetInterestRate()">
                             </div>
                             <div class="form-group">
                                 <label for="interest">Interest (%) *</label>
@@ -519,7 +519,7 @@
                         </div>
                         <div class="form-group">
                             <label for="editItemType">Item Type *</label>
-                            <select id="editItemType" required>
+                            <select id="editItemType" required onchange="autoSetEditInterestRate()">
                                 <option value="">Select item type</option>
                                 <option value="Gold">Gold</option>
                                 <option value="Silver">Silver</option>
@@ -527,7 +527,7 @@
                         </div>
                         <div class="form-group">
                             <label for="editItemAmount">Item Amount (₹) *</label>
-                            <input type="number" id="editItemAmount" required step="0.01">
+                            <input type="number" id="editItemAmount" required step="0.01" onchange="autoSetEditInterestRate()">
                         </div>
                         <div class="form-group">
                             <label for="editInterest">Interest (%) *</label>

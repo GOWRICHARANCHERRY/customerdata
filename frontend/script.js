@@ -101,6 +101,26 @@ async function generateBillNumber() {
   }
 }
 
+function autoSetInterestRate() {
+  const amount = parseFloat(document.getElementById('itemAmount').value);
+  const rateInput = document.getElementById('interest');
+  const itemType = document.getElementById('itemType').value;
+  if (!amount || amount <= 0 || !itemType) return;
+  if (itemType === 'Silver') rateInput.value = '3';
+  else if (amount < 10000) rateInput.value = '2.5';
+  else rateInput.value = '2';
+}
+
+function autoSetEditInterestRate() {
+  const amount = parseFloat(document.getElementById('editItemAmount').value);
+  const rateInput = document.getElementById('editInterest');
+  const itemType = document.getElementById('editItemType').value;
+  if (!amount || amount <= 0 || !itemType) return;
+  if (itemType === 'Silver') rateInput.value = '3';
+  else if (amount < 10000) rateInput.value = '2.5';
+  else rateInput.value = '2';
+}
+
 function generateExtraMoneyFields() {
   const count = parseInt(document.getElementById('extraMoneyCount').value);
   const container = document.getElementById('extraMoneyContainer');

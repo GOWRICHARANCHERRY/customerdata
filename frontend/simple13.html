@@ -1102,28 +1102,55 @@
 
       const totalPrincipal = principal + totalExtraMoney.reduce((s, e) => s + e.amount, 0);
 
-      let finalRate = baseRate;
+      let splitDate = null;
+      let rateBeforeSplit = null;
+      let rateAfterSplit = null;
       let rateNote = '';
 
       if (itemType === 'Silver') {
-        finalRate = 3;
+        rateAfterSplit = 3;
         rateNote = 'Rate: 3% (Silver item)';
       } else if (totalPrincipal >= 10000) {
-        finalRate = 2;
-        rateNote = 'Rate: 2% (Total ₹' + totalPrincipal.toLocaleString() + ' ≥ ₹10,000)';
+        let cumulative = principal;
+        for (const extra of totalExtraMoney) {
+          cumulative += extra.amount;
+          if (cumulative >= 10000 && cumulative - extra.amount < 10000 && principal < 10000) {
+            splitDate = extra.date;
+            rateBeforeSplit = 2.5;
+            rateAfterSplit = 2;
+            rateNote = 'Rate: 2.5% until ' + extra.date.toLocaleDateString() + ', then 2% thereafter (crossed ₹10,000 threshold)';
+            break;
+          }
+        }
+        if (!splitDate) {
+          rateAfterSplit = principal >= 10000 ? 2 : 2.5;
+          rateNote = 'Rate: ' + rateAfterSplit + '% (Total ₹' + totalPrincipal.toLocaleString() + ' ≥ ₹10,000)';
+        }
       } else {
-        finalRate = 2.5;
+        rateAfterSplit = 2.5;
         rateNote = 'Rate: 2.5% (Total ₹' + totalPrincipal.toLocaleString() + ' < ₹10,000)';
       }
 
-      let principalResult = calculateSingleAmount("Principal Amount", principal, finalRate, start, end);
-      let allResults = [principalResult];
+      let allResults = [];
+
+      if (splitDate && start < splitDate) {
+        let principalResult = calculateSplitAmount("Principal Amount", principal, rateBeforeSplit, rateAfterSplit, splitDate, start, end);
+        allResults.push(principalResult);
+      } else {
+        let principalResult = calculateSingleAmount("Principal Amount", principal, rateAfterSplit, start, end);
+        allResults.push(principalResult);
+      }
 
       for (let i = 1; i <= extraCount; i++) {
         const extraAmount = parseFloat(document.getElementById('extraAmount' + i).value);
         const extraStart = new Date(document.getElementById('extraStartDate' + i).value);
         if (!isNaN(extraAmount) && extraStart) {
-          let extraResult = calculateSingleAmount(getOrdinal(i) + ' Extra Money', extraAmount, finalRate, extraStart, end);
+          let extraResult;
+          if (splitDate && extraStart < splitDate) {
+            extraResult = calculateSplitAmount(getOrdinal(i) + ' Extra Money', extraAmount, rateBeforeSplit, rateAfterSplit, splitDate, extraStart, end);
+          } else {
+            extraResult = calculateSingleAmount(getOrdinal(i) + ' Extra Money', extraAmount, rateAfterSplit, extraStart, end);
+          }
           allResults.push(extraResult);
         }
       }
@@ -1133,7 +1160,7 @@
         const backAmount = parseFloat(document.getElementById('backAmount' + i).value);
         const backDate = new Date(document.getElementById('backDate' + i).value);
         if (!isNaN(backAmount) && backDate) {
-          let paymentResult = calculatePayment(getOrdinal(i) + ' Payment', backAmount, finalRate, backDate, end);
+          let paymentResult = calculatePayment(getOrdinal(i) + ' Payment', backAmount, rateAfterSplit, backDate, end);
           paymentResults.push(paymentResult);
         }
       }
@@ -1205,27 +1232,24 @@
       resultDiv.innerHTML = allTablesHTML + summaryHTML;
     }
 
-    function calculateSingleAmount(title, principal, rate, startDate, endDate) {
+    function calcPeriod(principal, rate, startDate, endDate) {
+      if (startDate >= endDate) return { totalInterest: 0, finalAmount: principal, rows: [] };
       let d1 = startDate.getDate(), m1 = startDate.getMonth() + 1, y1 = startDate.getFullYear();
       let d2 = endDate.getDate(), m2 = endDate.getMonth() + 1, y2 = endDate.getFullYear();
-
       if (d2 < d1) { d2 += 30; m2 -= 1; }
       let days = d2 - d1;
       if (m2 < m1) { m2 += 12; y2 -= 1; }
       let months = m2 - m1;
       let years = y2 - y1;
-
-      let table = '<table><tr><th>Period</th><th>Interest</th><th>Total Amount</th></tr>';
       let currentAmount = principal;
       let totalInterest = 0;
-
+      let rows = [];
       for (let i = 1; i <= years; i++) {
         let yearlyInterest = currentAmount * (rate / 100) * 12;
         currentAmount += yearlyInterest;
         totalInterest += yearlyInterest;
-        table += '<tr><td>Year ' + i + '</td><td>' + yearlyInterest.toFixed(2) + '</td><td>' + currentAmount.toFixed(2) + '</td></tr>';
+        rows.push({ label: 'Year ' + i, interest: yearlyInterest, amount: currentAmount });
       }
-
       let remainingMonths = months;
       let remainingDays = days;
       if (remainingMonths > 0 || remainingDays > 0) {
@@ -1234,17 +1258,54 @@
         let extraInterest = (monthlyInterest * remainingMonths) + (dailyInterest * remainingDays);
         currentAmount += extraInterest;
         totalInterest += extraInterest;
-        table += '<tr><td>Remaining ' + remainingMonths + 'M ' + remainingDays + 'D</td><td>' + extraInterest.toFixed(2) + '</td><td>' + currentAmount.toFixed(2) + '</td></tr>';
+        rows.push({ label: 'Remaining ' + remainingMonths + 'M ' + remainingDays + 'D', interest: extraInterest, amount: currentAmount });
       }
+      return { totalInterest, finalAmount: currentAmount, rows };
+    }
 
+    function calculateSingleAmount(title, principal, rate, startDate, endDate) {
+      const result = calcPeriod(principal, rate, startDate, endDate);
+      let table = '<table><tr><th>Period</th><th>Interest</th><th>Total Amount</th></tr>';
+      result.rows.forEach(r => {
+        table += '<tr><td>' + r.label + '</td><td>' + r.interest.toFixed(2) + '</td><td>' + r.amount.toFixed(2) + '</td></tr>';
+      });
       table += '</table>';
-
       return {
         title: title,
         tableHTML: table,
         principal: principal,
-        totalInterest: totalInterest,
-        finalAmount: currentAmount,
+        totalInterest: result.totalInterest,
+        finalAmount: result.finalAmount,
+        period: calculatePeriod(startDate, endDate)
+      };
+    }
+
+    function calculateSplitAmount(title, principal, rate1, rate2, splitDate, startDate, endDate) {
+      if (splitDate <= startDate || splitDate >= endDate || rate1 === rate2) {
+        return calculateSingleAmount(title, principal, rate1 || rate2, startDate, endDate);
+      }
+      const period1 = calcPeriod(principal, rate1, startDate, splitDate);
+      const period2 = calcPeriod(period1.finalAmount, rate2, splitDate, endDate);
+      let table = '<table><tr><th>Period</th><th>Interest</th><th>Total Amount</th></tr>';
+      if (period1.rows.length > 0) {
+        table += '<tr style="background: #e8f4e8;"><td colspan="3"><strong>At ' + rate1 + '% — ' + startDate.toLocaleDateString() + ' to ' + splitDate.toLocaleDateString() + '</strong></td></tr>';
+        period1.rows.forEach(r => {
+          table += '<tr><td>' + r.label + '</td><td>' + r.interest.toFixed(2) + '</td><td>' + r.amount.toFixed(2) + '</td></tr>';
+        });
+      }
+      if (period2.rows.length > 0) {
+        table += '<tr style="background: #e8f4ff;"><td colspan="3"><strong>At ' + rate2 + '% — ' + splitDate.toLocaleDateString() + ' to ' + endDate.toLocaleDateString() + '</strong></td></tr>';
+        period2.rows.forEach(r => {
+          table += '<tr><td>' + r.label + '</td><td>' + r.interest.toFixed(2) + '</td><td>' + r.amount.toFixed(2) + '</td></tr>';
+        });
+      }
+      table += '</table>';
+      return {
+        title: title,
+        tableHTML: table,
+        principal: principal,
+        totalInterest: period1.totalInterest + period2.totalInterest,
+        finalAmount: period2.finalAmount,
         period: calculatePeriod(startDate, endDate)
       };
     }
