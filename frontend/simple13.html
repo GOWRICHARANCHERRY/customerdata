@@ -329,14 +329,6 @@
   <div class="container">
     <h2>Lakshmi Narsima Pan broker Interest Calculator</h2>
 
-    <div id="excelExportSection" style="text-align: right; margin-bottom: 15px; display: none;">
-      <label style="font-weight: bold; font-size: 13px;">From:</label>
-      <input type="date" id="calcExportDateFrom" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
-      <label style="font-weight: bold; font-size: 13px;">To:</label>
-      <input type="date" id="calcExportDateTo" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
-      <button class="nav-btn" onclick="calcExportToExcel()" style="padding: 5px 12px; font-size: 13px;">📥 Export Excel</button>
-    </div>
-
     <div class="bill-number-section">
       <div class="bill-number-field">
         <label>Bill Number:</label>
@@ -492,14 +484,10 @@
         document.getElementById('approvalBtn').style.display = 'block';
         document.getElementById('adminDashboardBtn').style.display = 'block';
         document.getElementById('userRole').textContent = '(Admin)';
-        document.getElementById('excelExportSection').style.display = 'block';
       } else {
         if (!currentUser.dataEntryAccess) {
           const dataEntryLink = document.querySelector('.nav-data-entry');
           if (dataEntryLink) dataEntryLink.style.display = 'none';
-        }
-        if (currentUser.excelAccess) {
-          document.getElementById('excelExportSection').style.display = 'block';
         }
       }
     }
@@ -508,42 +496,6 @@
       localStorage.removeItem('token');
       localStorage.removeItem('currentUser');
       window.location.href = 'login.html';
-    }
-
-    async function calcExportToExcel() {
-      try {
-        const dateFrom = document.getElementById('calcExportDateFrom')?.value || '';
-        const dateTo = document.getElementById('calcExportDateTo')?.value || '';
-        let url = '/customers/export-excel';
-        const params = [];
-        if (dateFrom) params.push('dateFrom=' + encodeURIComponent(dateFrom));
-        if (dateTo) params.push('dateTo=' + encodeURIComponent(dateTo));
-        if (params.length) url += '?' + params.join('&');
-        const token = localStorage.getItem('token');
-        const res = await fetch(API_BASE + url, { headers: { 'Authorization': 'Bearer ' + token } });
-        if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('currentUser');
-          window.location.href = 'login.html';
-          return;
-        }
-        const blob = await res.blob();
-        const now = new Date();
-        const dateStr = now.getFullYear() + '-' +
-          (now.getMonth() + 1).toString().padStart(2, '0') + '-' +
-          now.getDate().toString().padStart(2, '0');
-        const rangeStr = dateFrom && dateTo ? '_' + dateFrom + '_to_' + dateTo : '';
-        const filename = 'backup_' + dateStr + rangeStr + '.xlsx';
-        const urlObj = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = urlObj;
-        a.download = filename;
-        a.click();
-        window.URL.revokeObjectURL(urlObj);
-        alert('Successfully exported to ' + filename);
-      } catch (err) {
-        alert('Error exporting to Excel.');
-      }
     }
 
     function autoSetInterestRate() {
@@ -1332,6 +1284,9 @@
       if (isSold) {
         headerHtml += '<p style="font-weight: bold; color: #28a745; margin: 5px 0 0 0;">Balance Remaining: ₹0.00 <span style="font-weight: normal; color: #666; font-size: 13px;">(settled on sale)</span></p>';
         headerHtml += '<p style="font-weight: bold; color: #333; margin: 3px 0 0 0;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+        if (pendingMoney > 0) {
+          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+        }
       } else {
         headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Interest Balance: ₹' + finalBalance.toFixed(2) + '</p>';
         if (pendingMoney > 0) {
@@ -1379,6 +1334,9 @@
         summaryHTML += '<p style="color: green; font-weight: bold; text-align: center; margin-top: 10px;">✓ Account Settled</p>';
         if (isSold) {
           summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; font-size: 14px;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+          if (pendingMoney > 0) {
+            summaryHTML += '<p style="color: #dc3545; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+          }
         }
       } else {
         const showTotal = pendingMoney > 0;
