@@ -329,8 +329,14 @@
             <div id="excelTab" class="tab-content">
                 <div class="form-section excel-section">
                     <h3>📊 Excel Export</h3>
-                    <p style="margin-bottom: 15px; color: #666;">Export all customer records to an Excel file (.xlsx format)</p>
-                    <button type="button" class="btn btn-success" onclick="exportToExcel()">📥 Export to Excel</button>
+                    <p style="margin-bottom: 15px; color: #666;">Export all customer records with full history and audit logs. Includes 3 sheets: Customer Records, Change History, Audit Logs.</p>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 15px;">
+                        <label style="font-weight: bold;">From:</label>
+                        <input type="date" id="exportDateFrom" style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;">
+                        <label style="font-weight: bold;">To:</label>
+                        <input type="date" id="exportDateTo" style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;">
+                        <button type="button" class="btn btn-success" onclick="exportToExcel()">📥 Export to Excel</button>
+                    </div>
                 </div>
 
                 <div class="form-section excel-section">

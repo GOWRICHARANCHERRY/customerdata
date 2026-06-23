@@ -532,19 +532,28 @@ async function markAsSold(recordId, context) {
 
 async function exportToExcel() {
   try {
-    const res = await apiRequest('/customers/export-excel', { raw: true });
+    const dateFrom = document.getElementById('exportDateFrom')?.value || '';
+    const dateTo = document.getElementById('exportDateTo')?.value || '';
+    let url = '/customers/export-excel';
+    const params = [];
+    if (dateFrom) params.push('dateFrom=' + encodeURIComponent(dateFrom));
+    if (dateTo) params.push('dateTo=' + encodeURIComponent(dateTo));
+    if (params.length) url += '?' + params.join('&');
+    const res = await apiRequest(url, { raw: true });
     const blob = await res.blob();
     const now = new Date();
-    const filename = 'customer_records_' + now.getFullYear() + '-' +
+    const dateStr = now.getFullYear() + '-' +
       (now.getMonth() + 1).toString().padStart(2, '0') + '-' +
-      now.getDate().toString().padStart(2, '0') + '.xlsx';
-    const url = window.URL.createObjectURL(blob);
+      now.getDate().toString().padStart(2, '0');
+    const rangeStr = dateFrom && dateTo ? '_' + dateFrom + '_to_' + dateTo : '';
+    const filename = 'backup_' + dateStr + rangeStr + '.xlsx';
+    const urlObj = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = urlObj;
     a.download = filename;
     a.click();
-    window.URL.revokeObjectURL(url);
-    showMessage('excelMessage', 'Successfully exported records to ' + filename, 'success');
+    window.URL.revokeObjectURL(urlObj);
+    showMessage('excelMessage', 'Successfully exported to ' + filename, 'success');
   } catch (err) {
     showMessage('excelMessage', 'Error exporting to Excel.', 'error');
   }

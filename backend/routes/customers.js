@@ -45,6 +45,8 @@ async function addAuditLog(queryFn, action, recordId, recordData, details = {}, 
   }
 }
 
+// ─── Static literal routes (MUST come before /:id) ───────────────
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
     let queryText = 'SELECT * FROM customer_records WHERE 1=1';
@@ -209,91 +211,6 @@ router.get('/next-bill-no', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/:id', authenticateToken, async (req, res) => {
-  try {
-    const result = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
-    const record = result.rows[0];
-    if (!record) return res.status(404).json({ error: 'Record not found' });
-    record.extraMoney = record.extraMoney || [];
-    record.moneyBack = record.moneyBack || [];
-    res.json(record);
-  } catch (err) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.put('/:id', authenticateToken, requirePermission('dataEntryAccess'), async (req, res) => {
-  try {
-    const oldResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
-    const oldRecord = oldResult.rows[0];
-    if (!oldRecord) return res.status(404).json({ error: 'Record not found' });
-
-    const {
-      billNo, billDate, customerName, phoneNumber, address,
-      itemName, itemType, itemAmount, interest, weight, purity,
-      notes, pendingMoney, extraMoneyCount, extraMoney, moneyBackCount, moneyBack, status
-    } = req.body;
-
-    if (!billNo || !customerName || !address || !itemName || !itemType || itemAmount == null || interest == null || weight == null) {
-      return res.status(400).json({ error: 'Please fill all required fields' });
-    }
-
-    if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
-      return res.status(400).json({ error: 'Item type must be Gold or Silver' });
-    }
-
-    const dup = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1 AND id != $2', [billNo, req.params.id]);
-    if (dup.rows.length > 0) return res.status(400).json({ error: 'Bill number already exists' });
-
-    await db.query(
-      `UPDATE customer_records SET
-        "billNo" = $1, "billDate" = $2, "customerName" = $3, "phoneNumber" = $4, address = $5,
-        "itemName" = $6, "itemType" = $7, "itemAmount" = $8, interest = $9, weight = $10, purity = $11,
-        notes = $12, "pendingMoney" = $13, "extraMoneyCount" = $14, "extraMoney" = $15::jsonb,
-        "moneyBackCount" = $16, "moneyBack" = $17::jsonb, status = $18, "updatedAt" = NOW()
-       WHERE id = $19`,
-      [billNo.trim(), billDate || '', customerName.trim(), phoneNumber || '', address.trim(),
-       itemName.trim(), itemType, parseFloat(itemAmount), parseFloat(interest), parseFloat(weight), purity || '',
-       notes || '', parseFloat(pendingMoney) || 0, parseInt(extraMoneyCount) || 0, JSON.stringify(extraMoney || []),
-       parseInt(moneyBackCount) || 0, JSON.stringify(moneyBack || []), status || oldRecord.status,
-       req.params.id]
-    );
-
-    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
-    const updated = updatedResult.rows[0];
-    updated.extraMoney = updated.extraMoney || [];
-    updated.moneyBack = updated.moneyBack || [];
-
-    const changes = [];
-    if (oldRecord.customerName !== updated.customerName) changes.push(`customerName: "${oldRecord.customerName}" → "${updated.customerName}"`);
-    if (oldRecord.phoneNumber !== updated.phoneNumber) changes.push(`phoneNumber: "${oldRecord.phoneNumber}" → "${updated.phoneNumber}"`);
-    if (oldRecord.address !== updated.address) changes.push(`address: "${oldRecord.address}" → "${updated.address}"`);
-    if (oldRecord.itemName !== updated.itemName) changes.push(`itemName: "${oldRecord.itemName}" → "${updated.itemName}"`);
-    if (oldRecord.itemType !== updated.itemType) changes.push(`itemType: "${oldRecord.itemType}" → "${updated.itemType}"`);
-    if (oldRecord.itemAmount !== updated.itemAmount) changes.push(`itemAmount: "${oldRecord.itemAmount}" → "${updated.itemAmount}"`);
-    if (oldRecord.interest !== updated.interest) changes.push(`interest: "${oldRecord.interest}" → "${updated.interest}"`);
-    if (oldRecord.weight !== updated.weight) changes.push(`weight: "${oldRecord.weight}" → "${updated.weight}"`);
-    if (oldRecord.purity !== updated.purity) changes.push(`purity: "${oldRecord.purity}" → "${updated.purity}"`);
-    if (oldRecord.notes !== updated.notes) changes.push(`notes: "${oldRecord.notes}" → "${updated.notes}"`);
-    if (oldRecord.billDate !== updated.billDate) changes.push(`billDate: "${oldRecord.billDate}" → "${updated.billDate}"`);
-    if (oldRecord.status !== updated.status) changes.push(`status: "${oldRecord.status}" → "${updated.status}"`);
-    if (oldRecord.pendingMoney !== updated.pendingMoney) changes.push(`pendingMoney: "${oldRecord.pendingMoney}" → "${updated.pendingMoney}"`);
-    if ((oldRecord.extraMoneyCount || 0) !== (updated.extraMoneyCount || 0)) changes.push(`extraMoneyCount: "${oldRecord.extraMoneyCount || 0}" → "${updated.extraMoneyCount || 0}"`);
-    if (JSON.stringify(oldRecord.extraMoney || []) !== JSON.stringify(updated.extraMoney || [])) changes.push(`extraMoney updated`);
-    if ((oldRecord.moneyBackCount || 0) !== (updated.moneyBackCount || 0)) changes.push(`moneyBackCount: "${oldRecord.moneyBackCount || 0}" → "${updated.moneyBackCount || 0}"`);
-    if (JSON.stringify(oldRecord.moneyBack || []) !== JSON.stringify(updated.moneyBack || [])) changes.push(`moneyBack updated`);
-
-    await addAuditLog(db.query, 'UPDATE', req.params.id, updated, {
-      message: `Record updated: ${updated.customerName}`,
-      changes, previousData: oldRecord
-    }, req.user);
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 router.delete('/bulk-delete', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { ids } = req.body;
@@ -359,38 +276,182 @@ router.post('/bulk-mark-sold', authenticateToken, adminOnly, async (req, res) =>
   }
 });
 
-router.post('/:id/mark-sold', authenticateToken, async (req, res) => {
+router.post('/import-excel', authenticateToken, requirePermission('excelAccess'), upload.single('file'), async (req, res) => {
   try {
-    const recResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
-    const record = recResult.rows[0];
-    if (!record) return res.status(404).json({ error: 'Record not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const changes = [];
-    changes.push(`status: "${record.status || 'active'}" → "sold"`);
-    if (record.pendingMoney > 0) changes.push(`pendingMoney: "${record.pendingMoney}" → "0 (settled on sale)"`);
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    await addAuditLog(db.query, 'MARK_SOLD', req.params.id, record, {
-      message: `Record marked as sold: ${record.customerName}`,
-      previousStatus: record.status || 'active',
-      changes
-    }, req.user);
+    if (!jsonData.length) return res.status(400).json({ error: 'Empty file' });
 
-    await db.query("UPDATE customer_records SET status = 'sold', \"soldAt\" = NOW(), \"updatedAt\" = NOW() WHERE id = $1", [req.params.id]);
+    const imported = [];
+    const errors = [];
 
-    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
-    const updated = updatedResult.rows[0];
-    updated.extraMoney = updated.extraMoney || [];
-    updated.moneyBack = updated.moneyBack || [];
-    res.json(updated);
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      for (let index = 0; index < jsonData.length; index++) {
+        const row = jsonData[index];
+        try {
+          const billNo = (row['Bill Number'] || '').toString().trim();
+          if (!billNo) { errors.push(`Row ${index + 2}: Missing Bill Number`); continue; }
+
+          const existing = await client.query('SELECT id FROM customer_records WHERE "billNo" = $1', [billNo]);
+          if (existing.rows.length > 0) { errors.push(`Row ${index + 2}: Bill ${billNo} already exists`); continue; }
+
+          const itemType = (row['Item Type'] || '').toString().trim();
+          if (itemType !== 'Gold' && itemType !== 'Silver') { errors.push(`Row ${index + 2}: Item type must be Gold/Silver`); continue; }
+
+          const id = uuidv4();
+          await client.query(
+            `INSERT INTO customer_records (id, "billNo", "billDate", "customerName", "phoneNumber", address, "itemName", "itemType", "itemAmount", interest, weight, purity, notes, "pendingMoney", "extraMoneyCount", "extraMoney", "moneyBackCount", "moneyBack", status, "createdAt", "createdBy")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18::jsonb, $19, $20, $21)`,
+            [id, billNo, row['Bill Date'] || '', (row['Customer Name'] || '').toString().trim(),
+             (row['Phone Number'] || '').toString().trim(), (row['Address'] || '').toString().trim(),
+             (row['Item Name'] || '').toString().trim(), itemType,
+             parseFloat(row['Item Amount']) || 0, parseFloat(row['Interest (%)']) || 0,
+             parseFloat(row['Weight (grams)']) || 0, (row['Purity'] || '').toString().trim(),
+             (row['Notes'] || '').toString().trim(), parseFloat(row['Pending Money']) || 0,
+             parseInt(row['Extra Money Count']) || 0, '[]', parseInt(row['Money Back Count']) || 0, '[]',
+             ((row['Status'] || 'active').toString().toLowerCase() === 'sold' ? 'sold' : 'active'),
+             new Date().toISOString(), req.user.username]
+          );
+          imported.push(billNo);
+        } catch (e) {
+          errors.push(`Row ${index + 2}: Import error`);
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    res.json({
+      imported: imported.length,
+      errors: errors.length,
+      errorDetails: errors,
+      message: `Imported ${imported.length} records. ${errors.length} errors.`
+    });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/:id/history', authenticateToken, async (req, res) => {
+router.get('/export-excel', authenticateToken, requirePermission('excelAccess'), async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM record_histories WHERE "recordId" = $1 ORDER BY timestamp DESC', [req.params.id]);
-    res.json(result.rows);
+    const { dateFrom, dateTo } = req.query;
+    let dateFilter = '';
+    const params = [];
+    if (dateFrom) { dateFilter += ' AND "createdAt"::date >= $' + (params.length + 1) + '::date'; params.push(dateFrom); }
+    if (dateTo) { dateFilter += ' AND "createdAt"::date <= $' + (params.length + 1) + '::date'; params.push(dateTo); }
+
+    const recordsResult = await db.query(`SELECT * FROM customer_records WHERE 1=1 ${dateFilter} ORDER BY "createdAt" DESC`, params);
+    const excelData = recordsResult.rows.map(r => ({
+      'Bill Number': r.billNo,
+      'Bill Date': r.billDate || '',
+      'Customer Name': r.customerName,
+      'Phone Number': r.phoneNumber || '',
+      'Address': r.address,
+      'Item Name': r.itemName,
+      'Item Type': r.itemType,
+      'Item Amount': r.itemAmount,
+      'Interest (%)': r.interest,
+      'Weight (grams)': r.weight,
+      'Purity': r.purity || '',
+      'Notes': r.notes || '',
+      'Pending Money': r.pendingMoney || 0,
+      'Extra Money Count': r.extraMoneyCount || 0,
+      'Extra Money Details': JSON.stringify(r.extraMoney || []),
+      'Money Back Count': r.moneyBackCount || 0,
+      'Money Back Details': JSON.stringify(r.moneyBack || []),
+      'Status': r.status || 'active',
+      'Created At': r.createdAt || '',
+      'Updated At': r.updatedAt || '',
+      'Sold At': r.soldAt || '',
+      'Created By': r.createdBy || ''
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(excelData);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Customer Records');
+
+    const historyResult = await db.query('SELECT * FROM record_histories ORDER BY timestamp DESC');
+    const historyData = historyResult.rows.map(h => ({
+      'Record ID': h.recordId || '',
+      'Bill Number': h.billNumber || '',
+      'Customer Name': h.customerName || '',
+      'Action': h.action || '',
+      'User': h.user || '',
+      'User Role': h.userRole || '',
+      'Timestamp': h.timestamp || '',
+      'Details': JSON.stringify(h.details || {}),
+      'Record Data (JSON)': JSON.stringify(h.recordData || {})
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(historyData);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Change History');
+
+    const auditResult = await db.query('SELECT * FROM audit_logs ORDER BY timestamp DESC');
+    const auditData = auditResult.rows.map(a => ({
+      'Record ID': a.recordId || '',
+      'Bill Number': a.billNumber || '',
+      'Customer Name': a.customerName || '',
+      'Action': a.action || '',
+      'User': a.user || '',
+      'User Role': a.userRole || '',
+      'Timestamp': a.timestamp || '',
+      'Details': JSON.stringify(a.details || {}),
+      'Record Data (JSON)': JSON.stringify(a.recordData || {})
+    }));
+    const ws3 = XLSX.utils.json_to_sheet(auditData);
+    XLSX.utils.book_append_sheet(wb, ws3, 'Audit Logs');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const rangeStr = dateFrom && dateTo ? `_${dateFrom}_to_${dateTo}` : '';
+    const filename = `backup_${dateStr}${rangeStr}.xlsx`;
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/download-template', authenticateToken, requirePermission('excelAccess'), (req, res) => {
+  try {
+    const template = [{
+      'Bill Number': 'BILL001',
+      'Bill Date': '2024-01-01',
+      'Customer Name': 'John Doe',
+      'Phone Number': '1234567890',
+      'Address': '123 Main Street, City',
+      'Item Name': 'Gold Ring',
+      'Item Type': 'Gold',
+      'Item Amount': 50000,
+      'Interest (%)': 2.5,
+      'Weight (grams)': 10.5,
+      'Purity': '22K',
+      'Pending Money': 0,
+      'Extra Money Count': 0,
+      'Money Back Count': 0,
+      'Notes': 'Sample record',
+      'Status': 'active'
+    }];
+
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="customer_records_template.xlsx"');
+    res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -488,138 +549,125 @@ router.get('/analytics/chart', authenticateToken, requirePermission('analyticsAc
   }
 });
 
-router.post('/import-excel', authenticateToken, requirePermission('excelAccess'), upload.single('file'), async (req, res) => {
+// ─── Parameterized /:id routes (MUST come after static routes) ──
+
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const result = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const record = result.rows[0];
+    if (!record) return res.status(404).json({ error: 'Record not found' });
+    record.extraMoney = record.extraMoney || [];
+    record.moneyBack = record.moneyBack || [];
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+router.put('/:id', authenticateToken, requirePermission('dataEntryAccess'), async (req, res) => {
+  try {
+    const oldResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const oldRecord = oldResult.rows[0];
+    if (!oldRecord) return res.status(404).json({ error: 'Record not found' });
 
-    if (!jsonData.length) return res.status(400).json({ error: 'Empty file' });
+    const {
+      billNo, billDate, customerName, phoneNumber, address,
+      itemName, itemType, itemAmount, interest, weight, purity,
+      notes, pendingMoney, extraMoneyCount, extraMoney, moneyBackCount, moneyBack, status
+    } = req.body;
 
-    const imported = [];
-    const errors = [];
-
-    const client = await db.getClient();
-    try {
-      await client.query('BEGIN');
-      for (let index = 0; index < jsonData.length; index++) {
-        const row = jsonData[index];
-        try {
-          const billNo = (row['Bill Number'] || '').toString().trim();
-          if (!billNo) { errors.push(`Row ${index + 2}: Missing Bill Number`); continue; }
-
-          const existing = await client.query('SELECT id FROM customer_records WHERE "billNo" = $1', [billNo]);
-          if (existing.rows.length > 0) { errors.push(`Row ${index + 2}: Bill ${billNo} already exists`); continue; }
-
-          const itemType = (row['Item Type'] || '').toString().trim();
-          if (itemType !== 'Gold' && itemType !== 'Silver') { errors.push(`Row ${index + 2}: Item type must be Gold/Silver`); continue; }
-
-          const id = uuidv4();
-          await client.query(
-            `INSERT INTO customer_records (id, "billNo", "billDate", "customerName", "phoneNumber", address, "itemName", "itemType", "itemAmount", interest, weight, purity, notes, "pendingMoney", "extraMoneyCount", "extraMoney", "moneyBackCount", "moneyBack", status, "createdAt", "createdBy")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18::jsonb, $19, $20, $21)`,
-            [id, billNo, row['Bill Date'] || '', (row['Customer Name'] || '').toString().trim(),
-             (row['Phone Number'] || '').toString().trim(), (row['Address'] || '').toString().trim(),
-             (row['Item Name'] || '').toString().trim(), itemType,
-             parseFloat(row['Item Amount']) || 0, parseFloat(row['Interest (%)']) || 0,
-             parseFloat(row['Weight (grams)']) || 0, (row['Purity'] || '').toString().trim(),
-             (row['Notes'] || '').toString().trim(), parseFloat(row['Pending Money']) || 0,
-             parseInt(row['Extra Money Count']) || 0, '[]', parseInt(row['Money Back Count']) || 0, '[]',
-             ((row['Status'] || 'active').toString().toLowerCase() === 'sold' ? 'sold' : 'active'),
-             new Date().toISOString(), req.user.username]
-          );
-          imported.push(billNo);
-        } catch (e) {
-          errors.push(`Row ${index + 2}: Import error`);
-        }
-      }
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
+    if (!billNo || !customerName || !address || !itemName || !itemType || itemAmount == null || interest == null || weight == null) {
+      return res.status(400).json({ error: 'Please fill all required fields' });
     }
 
-    res.json({
-      imported: imported.length,
-      errors: errors.length,
-      errorDetails: errors,
-      message: `Imported ${imported.length} records. ${errors.length} errors.`
-    });
+    if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
+      return res.status(400).json({ error: 'Item type must be Gold or Silver' });
+    }
+
+    const dup = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1 AND id != $2', [billNo, req.params.id]);
+    if (dup.rows.length > 0) return res.status(400).json({ error: 'Bill number already exists' });
+
+    await db.query(
+      `UPDATE customer_records SET
+        "billNo" = $1, "billDate" = $2, "customerName" = $3, "phoneNumber" = $4, address = $5,
+        "itemName" = $6, "itemType" = $7, "itemAmount" = $8, interest = $9, weight = $10, purity = $11,
+        notes = $12, "pendingMoney" = $13, "extraMoneyCount" = $14, "extraMoney" = $15::jsonb,
+        "moneyBackCount" = $16, "moneyBack" = $17::jsonb, status = $18, "updatedAt" = NOW()
+       WHERE id = $19`,
+      [billNo.trim(), billDate || '', customerName.trim(), phoneNumber || '', address.trim(),
+       itemName.trim(), itemType, parseFloat(itemAmount), parseFloat(interest), parseFloat(weight), purity || '',
+       notes || '', parseFloat(pendingMoney) || 0, parseInt(extraMoneyCount) || 0, JSON.stringify(extraMoney || []),
+       parseInt(moneyBackCount) || 0, JSON.stringify(moneyBack || []), status || oldRecord.status,
+       req.params.id]
+    );
+
+    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const updated = updatedResult.rows[0];
+    updated.extraMoney = updated.extraMoney || [];
+    updated.moneyBack = updated.moneyBack || [];
+
+    const changes = [];
+    if (oldRecord.customerName !== updated.customerName) changes.push(`customerName: "${oldRecord.customerName}" → "${updated.customerName}"`);
+    if (oldRecord.phoneNumber !== updated.phoneNumber) changes.push(`phoneNumber: "${oldRecord.phoneNumber}" → "${updated.phoneNumber}"`);
+    if (oldRecord.address !== updated.address) changes.push(`address: "${oldRecord.address}" → "${updated.address}"`);
+    if (oldRecord.itemName !== updated.itemName) changes.push(`itemName: "${oldRecord.itemName}" → "${updated.itemName}"`);
+    if (oldRecord.itemType !== updated.itemType) changes.push(`itemType: "${oldRecord.itemType}" → "${updated.itemType}"`);
+    if (oldRecord.itemAmount !== updated.itemAmount) changes.push(`itemAmount: "${oldRecord.itemAmount}" → "${updated.itemAmount}"`);
+    if (oldRecord.interest !== updated.interest) changes.push(`interest: "${oldRecord.interest}" → "${updated.interest}"`);
+    if (oldRecord.weight !== updated.weight) changes.push(`weight: "${oldRecord.weight}" → "${updated.weight}"`);
+    if (oldRecord.purity !== updated.purity) changes.push(`purity: "${oldRecord.purity}" → "${updated.purity}"`);
+    if (oldRecord.notes !== updated.notes) changes.push(`notes: "${oldRecord.notes}" → "${updated.notes}"`);
+    if (oldRecord.billDate !== updated.billDate) changes.push(`billDate: "${oldRecord.billDate}" → "${updated.billDate}"`);
+    if (oldRecord.status !== updated.status) changes.push(`status: "${oldRecord.status}" → "${updated.status}"`);
+    if (oldRecord.pendingMoney !== updated.pendingMoney) changes.push(`pendingMoney: "${oldRecord.pendingMoney}" → "${updated.pendingMoney}"`);
+    if ((oldRecord.extraMoneyCount || 0) !== (updated.extraMoneyCount || 0)) changes.push(`extraMoneyCount: "${oldRecord.extraMoneyCount || 0}" → "${updated.extraMoneyCount || 0}"`);
+    if (JSON.stringify(oldRecord.extraMoney || []) !== JSON.stringify(updated.extraMoney || [])) changes.push(`extraMoney updated`);
+    if ((oldRecord.moneyBackCount || 0) !== (updated.moneyBackCount || 0)) changes.push(`moneyBackCount: "${oldRecord.moneyBackCount || 0}" → "${updated.moneyBackCount || 0}"`);
+    if (JSON.stringify(oldRecord.moneyBack || []) !== JSON.stringify(updated.moneyBack || [])) changes.push(`moneyBack updated`);
+
+    await addAuditLog(db.query, 'UPDATE', req.params.id, updated, {
+      message: `Record updated: ${updated.customerName}`,
+      changes, previousData: oldRecord
+    }, req.user);
+
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/export-excel', authenticateToken, requirePermission('excelAccess'), async (req, res) => {
+router.post('/:id/mark-sold', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM customer_records ORDER BY "createdAt" DESC');
-    const excelData = result.rows.map(r => ({
-      'Bill Number': r.billNo,
-      'Bill Date': r.billDate || '',
-      'Customer Name': r.customerName,
-      'Phone Number': r.phoneNumber || '',
-      'Address': r.address,
-      'Item Name': r.itemName,
-      'Item Type': r.itemType,
-      'Item Amount': r.itemAmount,
-      'Interest (%)': r.interest,
-      'Weight (grams)': r.weight,
-      'Purity': r.purity || '',
-      'Pending Money': r.pendingMoney || 0,
-      'Extra Money Count': r.extraMoneyCount || 0,
-      'Money Back Count': r.moneyBackCount || 0,
-      'Notes': r.notes || '',
-      'Status': r.status || 'active'
-    }));
+    const recResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const record = recResult.rows[0];
+    if (!record) return res.status(404).json({ error: 'Record not found' });
 
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Customer Records');
+    const changes = [];
+    changes.push(`status: "${record.status || 'active'}" → "sold"`);
+    if (record.pendingMoney > 0) changes.push(`pendingMoney: "${record.pendingMoney}" → "0 (settled on sale)"`);
 
-    const filename = `customer_records_${new Date().toISOString().split('T')[0]}.xlsx`;
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    await addAuditLog(db.query, 'MARK_SOLD', req.params.id, record, {
+      message: `Record marked as sold: ${record.customerName}`,
+      previousStatus: record.status || 'active',
+      changes
+    }, req.user);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(buffer);
+    await db.query("UPDATE customer_records SET status = 'sold', \"soldAt\" = NOW(), \"updatedAt\" = NOW() WHERE id = $1", [req.params.id]);
+
+    const updatedResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
+    const updated = updatedResult.rows[0];
+    updated.extraMoney = updated.extraMoney || [];
+    updated.moneyBack = updated.moneyBack || [];
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/download-template', authenticateToken, requirePermission('excelAccess'), (req, res) => {
+router.get('/:id/history', authenticateToken, async (req, res) => {
   try {
-    const template = [{
-      'Bill Number': 'BILL001',
-      'Bill Date': '2024-01-01',
-      'Customer Name': 'John Doe',
-      'Phone Number': '1234567890',
-      'Address': '123 Main Street, City',
-      'Item Name': 'Gold Ring',
-      'Item Type': 'Gold',
-      'Item Amount': 50000,
-      'Interest (%)': 2.5,
-      'Weight (grams)': 10.5,
-      'Purity': '22K',
-      'Pending Money': 0,
-      'Extra Money Count': 0,
-      'Money Back Count': 0,
-      'Notes': 'Sample record',
-      'Status': 'active'
-    }];
-
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="customer_records_template.xlsx"');
-    res.send(buffer);
+    const result = await db.query('SELECT * FROM record_histories WHERE "recordId" = $1 ORDER BY timestamp DESC', [req.params.id]);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }
