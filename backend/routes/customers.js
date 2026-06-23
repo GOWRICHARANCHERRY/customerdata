@@ -3,10 +3,17 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authenticateToken, adminOnly } = require('./auth');
+const { authenticateToken, adminOnly, requirePermission } = require('./auth');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+const ALLOWED_SEARCH_TYPES = ['customerName', 'phoneNumber', 'itemType', 'billNo', 'itemName', 'status'];
+const ALLOWED_ITEM_TYPES = ['Gold', 'Silver'];
+const MAX_LENGTHS = {
+  customerName: 100, address: 500, itemName: 200,
+  phoneNumber: 20, billNo: 50, notes: 2000, purity: 50
+};
 
 async function addAuditLog(queryFn, action, recordId, recordData, details = {}, user) {
   const logEntry = {
@@ -46,15 +53,19 @@ router.get('/', authenticateToken, async (req, res) => {
     const { filterType, filterStatus, minAmount, maxAmount, pendingFilter, sortBy, searchType, searchValue } = req.query;
 
     if (filterType) {
+      if (!ALLOWED_ITEM_TYPES.includes(filterType)) {
+        return res.status(400).json({ error: 'Invalid filter type' });
+      }
       queryText += ' AND "itemType" = $' + (params.length + 1);
       params.push(filterType);
     }
     if (filterStatus) {
       if (filterStatus === 'active') {
         queryText += " AND (status IS NULL OR status = 'active')";
+      } else if (filterStatus === 'sold') {
+        queryText += " AND status = 'sold'";
       } else {
-        queryText += ' AND status = $' + (params.length + 1);
-        params.push(filterStatus);
+        return res.status(400).json({ error: 'Invalid filter status' });
       }
     }
     if (minAmount) {
@@ -75,9 +86,11 @@ router.get('/', authenticateToken, async (req, res) => {
       if (searchType === 'billNo') {
         queryText += ' AND ("billNo" ILIKE $' + (params.length + 1) + ')';
         params.push(`%${searchValue}%`);
-      } else if (searchType) {
+      } else if (searchType && ALLOWED_SEARCH_TYPES.includes(searchType)) {
         queryText += ' AND "' + searchType + '" ILIKE $' + (params.length + 1);
         params.push(`%${searchValue}%`);
+      } else if (searchType) {
+        return res.status(400).json({ error: 'Invalid search type' });
       }
     }
 
@@ -99,11 +112,11 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(records);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('dataEntryAccess'), async (req, res) => {
   try {
     const {
       billNo, billDate, customerName, phoneNumber, address,
@@ -113,6 +126,17 @@ router.post('/', authenticateToken, async (req, res) => {
 
     if (!billNo || !customerName || !address || !itemName || !itemType || itemAmount == null || interest == null || weight == null) {
       return res.status(400).json({ error: 'Please fill all required fields' });
+    }
+
+    if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
+      return res.status(400).json({ error: 'Item type must be Gold or Silver' });
+    }
+
+    if (customerName && customerName.length > MAX_LENGTHS.customerName) {
+      return res.status(400).json({ error: 'Customer name too long (max 100)' });
+    }
+    if (billNo && billNo.length > MAX_LENGTHS.billNo) {
+      return res.status(400).json({ error: 'Bill number too long (max 50)' });
     }
 
     const existing = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1', [billNo]);
@@ -167,7 +191,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     res.json(createdRecord);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -181,7 +205,7 @@ router.get('/next-bill-no', authenticateToken, async (req, res) => {
     }
     res.json({ nextBillNo: next });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -194,11 +218,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
     record.moneyBack = record.moneyBack || [];
     res.json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('dataEntryAccess'), async (req, res) => {
   try {
     const oldResult = await db.query('SELECT * FROM customer_records WHERE id = $1', [req.params.id]);
     const oldRecord = oldResult.rows[0];
@@ -212,6 +236,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     if (!billNo || !customerName || !address || !itemName || !itemType || itemAmount == null || interest == null || weight == null) {
       return res.status(400).json({ error: 'Please fill all required fields' });
+    }
+
+    if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
+      return res.status(400).json({ error: 'Item type must be Gold or Silver' });
     }
 
     const dup = await db.query('SELECT id FROM customer_records WHERE "billNo" = $1 AND id != $2', [billNo, req.params.id]);
@@ -262,11 +290,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.delete('/bulk-delete', authenticateToken, async (req, res) => {
+router.delete('/bulk-delete', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ error: 'No record IDs provided' });
@@ -294,11 +322,11 @@ router.delete('/bulk-delete', authenticateToken, async (req, res) => {
 
     res.json({ message: `${ids.length} record(s) deleted` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.post('/bulk-mark-sold', authenticateToken, async (req, res) => {
+router.post('/bulk-mark-sold', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ error: 'No record IDs provided' });
@@ -327,7 +355,7 @@ router.post('/bulk-mark-sold', authenticateToken, async (req, res) => {
 
     res.json({ message: `${ids.length} record(s) marked as sold` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -355,7 +383,7 @@ router.post('/:id/mark-sold', authenticateToken, async (req, res) => {
     updated.moneyBack = updated.moneyBack || [];
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -364,7 +392,7 @@ router.get('/:id/history', authenticateToken, async (req, res) => {
     const result = await db.query('SELECT * FROM record_histories WHERE "recordId" = $1 ORDER BY timestamp DESC', [req.params.id]);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -382,7 +410,7 @@ router.get('/audit-logs/all', authenticateToken, adminOnly, async (req, res) => 
     const result = await db.query(queryText, params);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -391,11 +419,11 @@ router.get('/audit-logs/users', authenticateToken, adminOnly, async (req, res) =
     const result = await db.query('SELECT DISTINCT "user" FROM audit_logs ORDER BY "user"');
     res.json(result.rows.map(u => u.user));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/analytics/summary', authenticateToken, async (req, res) => {
+router.get('/analytics/summary', authenticateToken, requirePermission('analyticsAccess'), async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
     let dateFilter = '';
@@ -421,11 +449,11 @@ router.get('/analytics/summary', authenticateToken, async (req, res) => {
       silverCount: parseInt(silverCount.rows[0].count)
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/analytics/chart', authenticateToken, async (req, res) => {
+router.get('/analytics/chart', authenticateToken, requirePermission('analyticsAccess'), async (req, res) => {
   try {
     const { dateFrom, dateTo, chartType } = req.query;
     let dateFilter = '';
@@ -456,11 +484,11 @@ router.get('/analytics/chart', authenticateToken, async (req, res) => {
 
     res.json([]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.post('/import-excel', authenticateToken, upload.single('file'), async (req, res) => {
+router.post('/import-excel', authenticateToken, requirePermission('excelAccess'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -504,7 +532,7 @@ router.post('/import-excel', authenticateToken, upload.single('file'), async (re
           );
           imported.push(billNo);
         } catch (e) {
-          errors.push(`Row ${index + 2}: ${e.message}`);
+          errors.push(`Row ${index + 2}: Import error`);
         }
       }
       await client.query('COMMIT');
@@ -522,11 +550,11 @@ router.post('/import-excel', authenticateToken, upload.single('file'), async (re
       message: `Imported ${imported.length} records. ${errors.length} errors.`
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/export-excel', authenticateToken, async (req, res) => {
+router.get('/export-excel', authenticateToken, requirePermission('excelAccess'), async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM customer_records ORDER BY "createdAt" DESC');
     const excelData = result.rows.map(r => ({
@@ -559,11 +587,11 @@ router.get('/export-excel', authenticateToken, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/download-template', authenticateToken, (req, res) => {
+router.get('/download-template', authenticateToken, requirePermission('excelAccess'), (req, res) => {
   try {
     const template = [{
       'Bill Number': 'BILL001',
@@ -593,7 +621,7 @@ router.get('/download-template', authenticateToken, (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="customer_records_template.xlsx"');
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

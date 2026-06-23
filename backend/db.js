@@ -111,12 +111,14 @@ async function initialize() {
   const result = await query('SELECT id FROM users WHERE username = $1', ['gowricharan']);
   if (result.rows.length === 0) {
     const bcrypt = require('bcryptjs');
-    const hash = bcrypt.hashSync('@8978523646ddD', 10);
-    await query(
-      `INSERT INTO users (username, password, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess")
-       VALUES ($1, $2, 'admin', 1, 1, 1, 1, 1)`,
-      ['gowricharan', hash]
-    );
+  const adminPassword = process.env.ADMIN_PASSWORD || require('crypto').randomBytes(16).toString('hex');
+  const hash = bcrypt.hashSync(adminPassword, 10);
+  await query(
+    `INSERT INTO users (username, password, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess")
+     VALUES ($1, $2, 'admin', 1, 1, 1, 1, 1)`,
+    ['gowricharan', hash]
+  );
+  console.log('Admin user created. Password: ' + adminPassword);
   }
 }
 

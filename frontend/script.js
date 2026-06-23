@@ -1,5 +1,12 @@
 const API_BASE = '/api';
 
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function getAuthHeaders() {
   const token = localStorage.getItem('token');
   return {
@@ -1252,7 +1259,11 @@ async function deleteRecord(recordId, containerId) {
 
 function showMessage(containerId, message, type) {
   const container = document.getElementById(containerId);
-  container.innerHTML = '<div class="message ' + type + '">' + message + '</div>';
+  container.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'message ' + type;
+  div.textContent = message;
+  container.appendChild(div);
   if (type === 'success') {
     setTimeout(() => { container.innerHTML = ''; }, 3000);
   }

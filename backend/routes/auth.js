@@ -4,13 +4,14 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'customer-mgmt-secret-key-2024';
 
-function getCurrentTimeInTimezone(timezone) {
-  const now = new Date();
-  const parts = now.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone || 'UTC' }).split(':');
-  return parts[0] + ':' + parts[1];
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set');
+  process.exit(1);
 }
+const JWT_SECRET = process.env.JWT_SECRET;
+
+const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -48,32 +49,59 @@ function adminOnly(req, res, next) {
   next();
 }
 
+function requirePermission(permission) {
+  return async (req, res, next) => {
+    if (req.user.role === 'admin') return next();
+    try {
+      const result = await db.query('SELECT "' + permission + '" FROM users WHERE username = $1', [req.user.username]);
+      if (result.rows.length === 0 || !result.rows[0][permission]) {
+        return res.status(403).json({ error: 'Access denied: ' + permission + ' required' });
+      }
+      next();
+    } catch (err) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
+function getCurrentTimeInTimezone(timezone) {
+  const now = new Date();
+  const parts = now.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone || 'UTC' }).split(':');
+  return parts[0] + ':' + parts[1];
+}
+
 router.post('/signup', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!USERNAME_REGEX.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-30 alphanumeric characters or underscores' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+      return res.status(400).json({ error: 'Password must contain uppercase, lowercase, and a number' });
     }
 
-    if (username === 'gowricharan') {
+    if (username.toLowerCase() === 'gowricharan') {
       return res.status(400).json({ error: 'This username is reserved' });
     }
 
-    const existingUser = await db.query('SELECT id FROM users WHERE username = $1', [username]);
-    const existingPending = await db.query('SELECT id FROM pending_signups WHERE username = $1', [username]);
+    const existingUser = await db.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+    const existingPending = await db.query('SELECT id FROM pending_signups WHERE LOWER(username) = LOWER($1)', [username]);
     if (existingUser.rows.length > 0 || existingPending.rows.length > 0) {
-      return res.status(400).json({ error: 'Username already exists or is pending approval' });
+      return res.json({ message: 'If the username is available, your account has been created.' });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     await db.query('INSERT INTO pending_signups (username, password) VALUES ($1, $2)', [username, hashedPassword]);
 
-    res.json({ message: 'Account created! Please wait for admin approval.' });
+    res.json({ message: 'If the username is available, your account has been created.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -84,7 +112,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    const result = await db.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
     const user = result.rows[0];
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
@@ -98,7 +126,7 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account pending approval. Please wait for admin confirmation.', pending: true });
     }
 
-    if (username !== 'gowricharan' && user.loginFrom && user.loginTo) {
+    if (username.toLowerCase() !== 'gowricharan' && user.loginFrom && user.loginTo) {
       const currentTime = getCurrentTimeInTimezone(user.timezone || 'UTC');
       if (currentTime < user.loginFrom || currentTime > user.loginTo) {
         return res.status(403).json({
@@ -128,7 +156,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -138,53 +166,50 @@ router.post('/forgot-password', async (req, res) => {
     if (!username || !newPassword) {
       return res.status(400).json({ error: 'Username and new password are required' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+      return res.status(400).json({ error: 'Password must contain uppercase, lowercase, and a number' });
     }
 
-    if (username === 'gowricharan') {
+    if (username.toLowerCase() === 'gowricharan') {
       return res.status(400).json({ error: 'Cannot reset password for admin account' });
-    }
-
-    const userResult = await db.query('SELECT id FROM users WHERE username = $1', [username]);
-    const pendingResult = await db.query('SELECT id FROM pending_signups WHERE username = $1', [username]);
-    if (userResult.rows.length === 0 && pendingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Username not found' });
     }
 
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
     await db.query('INSERT INTO password_reset_requests (username, "newPassword") VALUES ($1, $2)', [username, hashedPassword]);
 
-    res.json({ message: 'Password reset request submitted. Wait for admin approval.' });
+    res.json({ message: 'If the username exists, a reset request has been submitted.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "createdAt" FROM users');
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "createdAt" FROM users ORDER BY username');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.get('/pending-signups', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM pending_signups');
+    const result = await db.query('SELECT id, username, timestamp FROM pending_signups');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.get('/password-reset-requests', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM password_reset_requests WHERE status = 'pending'");
+    const result = await db.query("SELECT id, username, timestamp, status FROM password_reset_requests WHERE status = 'pending'");
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -204,7 +229,7 @@ router.post('/approve-pending-user', authenticateToken, adminOnly, async (req, r
 
     res.json({ message: `User ${username} approved!` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -214,7 +239,7 @@ router.post('/reject-pending-user', authenticateToken, adminOnly, async (req, re
     await db.query('DELETE FROM pending_signups WHERE username = $1', [username]);
     res.json({ message: `User ${username} rejected.` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -237,7 +262,7 @@ router.post('/approve-password-reset', authenticateToken, adminOnly, async (req,
     await db.query("UPDATE password_reset_requests SET status = 'approved' WHERE username = $1", [username]);
     res.json({ message: `Password reset approved for ${username}!` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -247,7 +272,7 @@ router.post('/reject-password-reset', authenticateToken, adminOnly, async (req, 
     await db.query("UPDATE password_reset_requests SET status = 'rejected' WHERE username = $1", [username]);
     res.json({ message: `Password reset rejected for ${username}.` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -271,13 +296,21 @@ router.post('/toggle-access', authenticateToken, adminOnly, async (req, res) => 
 
     res.json({ message: `${accessType} toggled for ${username}`, newValue: currentValue ? 0 : 1 });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.post('/update-login-time', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username, loginFrom, loginTo, timezone } = req.body;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (loginFrom && !timeRegex.test(loginFrom)) {
+      return res.status(400).json({ error: 'loginFrom must be in HH:MM format' });
+    }
+    if (loginTo && !timeRegex.test(loginTo)) {
+      return res.status(400).json({ error: 'loginTo must be in HH:MM format' });
+    }
+
     const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
     if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found' });
 
@@ -288,37 +321,42 @@ router.post('/update-login-time', authenticateToken, adminOnly, async (req, res)
 
     res.json({ message: `Login time updated for ${username}` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.delete('/delete-user/:username', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.params;
-    if (username === 'gowricharan') {
+    if (username.toLowerCase() === 'gowricharan') {
       return res.status(400).json({ error: 'Cannot delete master admin account' });
     }
     await db.query('DELETE FROM users WHERE username = $1', [username]);
     res.json({ message: `User ${username} deleted.` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.get('/me', authenticateToken, async (req, res) => {
-  const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess" FROM users WHERE username = $1', [req.user.username]);
-  const user = result.rows[0];
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({
-    username: user.username,
-    role: user.role,
-    dataEntryAccess: !!user.dataEntryAccess,
-    excelAccess: !!user.excelAccess,
-    auditAccess: !!user.auditAccess,
-    analyticsAccess: !!user.analyticsAccess
-  });
+  try {
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess" FROM users WHERE username = $1', [req.user.username]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({
+      username: user.username,
+      role: user.role,
+      dataEntryAccess: !!user.dataEntryAccess,
+      excelAccess: !!user.excelAccess,
+      auditAccess: !!user.auditAccess,
+      analyticsAccess: !!user.analyticsAccess
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;
 module.exports.authenticateToken = authenticateToken;
 module.exports.adminOnly = adminOnly;
+module.exports.requirePermission = requirePermission;
