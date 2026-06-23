@@ -75,6 +75,19 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account pending approval. Please wait for admin confirmation.', pending: true });
     }
 
+    if (username !== 'gowricharan' && user.loginFrom && user.loginTo) {
+      const now = new Date();
+      const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      if (currentTime < user.loginFrom || currentTime > user.loginTo) {
+        return res.status(403).json({
+          error: `Login restricted. Your allowed login time is ${user.loginFrom} to ${user.loginTo}.`,
+          timeRestricted: true,
+          loginFrom: user.loginFrom,
+          loginTo: user.loginTo
+        });
+      }
+    }
+
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       JWT_SECRET,
@@ -128,7 +141,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "createdAt" FROM users');
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", "createdAt" FROM users');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -235,6 +248,23 @@ router.post('/toggle-access', authenticateToken, adminOnly, async (req, res) => 
     );
 
     res.json({ message: `${accessType} toggled for ${username}`, newValue: currentValue ? 0 : 1 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/update-login-time', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { username, loginFrom, loginTo } = req.body;
+    const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found' });
+
+    await db.query(
+      `UPDATE users SET "loginFrom" = $1, "loginTo" = $2, "updatedAt" = NOW() WHERE username = $3`,
+      [loginFrom || null, loginTo || null, username]
+    );
+
+    res.json({ message: `Login time updated for ${username}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

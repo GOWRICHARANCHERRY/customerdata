@@ -44,6 +44,9 @@ async function initialize() {
       status TEXT DEFAULT 'pending'
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "loginFrom" TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "loginTo" TEXT;
+
     CREATE TABLE IF NOT EXISTS customer_records (
       id TEXT PRIMARY KEY,
       "billNo" TEXT NOT NULL,

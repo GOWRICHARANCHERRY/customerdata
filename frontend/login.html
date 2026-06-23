@@ -522,6 +522,8 @@
                 if (!res.ok) {
                     if (data.pending) {
                         showMessage('loginMessage', 'Your account is pending approval. Please wait for admin confirmation.', 'warning');
+                    } else if (data.timeRestricted) {
+                        showMessage('loginMessage', data.error, 'error');
                     } else {
                         showMessage('loginMessage', data.error || 'Invalid username or password.', 'error');
                     }

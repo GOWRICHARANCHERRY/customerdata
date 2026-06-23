@@ -811,6 +811,17 @@
               <li>Audit Logs: ${auditStatus}</li>
               <li>Analytics: ${analyticsStatus}</li>
             </ul>
+            ${user.approved ? `
+              <div class="login-time-controls" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                <label style="font-weight: bold; display: block; margin-bottom: 5px;">⏰ Login Time Restriction</label>
+                <label style="display: inline-block; margin-right: 5px;">From:</label>
+                <input type="time" id="loginFrom_${user.username}" value="${user.loginFrom || ''}" style="margin-right: 10px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                <label style="display: inline-block; margin-right: 5px;">To:</label>
+                <input type="time" id="loginTo_${user.username}" value="${user.loginTo || ''}" style="margin-right: 10px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                <button class="btn btn-primary btn-small" onclick="saveLoginTime('${user.username}')">💾 Save</button>
+                <button class="btn btn-secondary btn-small" onclick="clearLoginTime('${user.username}')">✖️ Clear</button>
+              </div>
+            ` : ''}
             <div class="user-actions">
               ${!user.approved ? `<button class="btn btn-success btn-small" onclick="approveExistingUser('${user.username}')">✅ Approve</button>` : ''}
               ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'dataEntryAccess')">${user.dataEntryAccess ? 'Revoke' : 'Grant'} Data Access</button>` : ''}
@@ -953,6 +964,30 @@
         showAdminMessage('User ' + username + ' deleted!', 'success');
         loadAdminDashboard();
       } catch (err) { showAdminMessage('Error deleting user.', 'error'); }
+    }
+
+    async function saveLoginTime(username) {
+      const loginFrom = document.getElementById('loginFrom_' + username).value;
+      const loginTo = document.getElementById('loginTo_' + username).value;
+      try {
+        await apiRequest('/auth/update-login-time', {
+          method: 'POST',
+          body: { username, loginFrom, loginTo }
+        });
+        showAdminMessage('Login time saved for ' + username, 'success');
+        loadAdminDashboard();
+      } catch (err) { showAdminMessage('Error saving login time.', 'error'); }
+    }
+
+    async function clearLoginTime(username) {
+      try {
+        await apiRequest('/auth/update-login-time', {
+          method: 'POST',
+          body: { username, loginFrom: null, loginTo: null }
+        });
+        showAdminMessage('Login time restriction cleared for ' + username, 'success');
+        loadAdminDashboard();
+      } catch (err) { showAdminMessage('Error clearing login time.', 'error'); }
     }
 
     async function refreshDashboard() {
@@ -1220,6 +1255,8 @@
       }
 
       let finalBalance = grandTotalAmount - totalPayments;
+      const pendingMoney = parseFloat(document.getElementById('quickPendingAmount').value) || 0;
+      const totalOwed = finalBalance + pendingMoney;
 
       let billHeader = document.getElementById("billHeader");
       const isSold = (currentSearchedRecordStatus || '').toLowerCase() === 'sold';
@@ -1227,6 +1264,13 @@
       let headerHtml = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
       if (isSold) {
         headerHtml += '<p style="font-weight: bold; color: #28a745; margin: 5px 0 0 0;">Balance Remaining: ₹0.00 <span style="font-weight: normal; color: #666; font-size: 13px;">(settled on sale)</span></p>';
+        headerHtml += '<p style="font-weight: bold; color: #333; margin: 3px 0 0 0;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+      } else {
+        headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Interest Balance: ₹' + finalBalance.toFixed(2) + '</p>';
+        if (pendingMoney > 0) {
+          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+          headerHtml += '<p style="font-weight: bold; color: #333; margin: 5px 0 0 0; border-top: 1px solid #ddd; padding-top: 3px;">Total Owed: ₹' + totalOwed.toFixed(2) + '</p>';
+        }
       }
       billHeader.innerHTML = headerHtml;
 
@@ -1251,13 +1295,31 @@
         summaryHTML += '<tr class="payment-row"><td><strong>TOTAL PAYMENTS</strong></td><td><strong>-</strong></td><td><strong>-' + paymentResults.reduce((sum, p) => sum + p.principal, 0).toFixed(2) + '</strong></td><td><strong>-' + totalPaymentInterest.toFixed(2) + '</strong></td><td><strong>-' + totalPayments.toFixed(2) + '</strong></td></tr>';
       }
 
+      if (!isSold && pendingMoney > 0) {
+        summaryHTML += '<tr class="pending-row"><td><strong>PENDING MONEY</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong style="color: #dc3545;">+' + pendingMoney.toFixed(2) + '</strong></td></tr>';
+      }
+
       const displayBalance = isSold ? 0 : finalBalance;
-      summaryHTML += '<tr class="total-row" style="background: ' + (displayBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayBalance.toFixed(2) + '</strong></td></tr></table>';
+      const displayTotal = isSold ? 0 : totalOwed;
+
+      if (!isSold && pendingMoney > 0) {
+        summaryHTML += '<tr class="total-row" style="background: #ffeeba;"><td><strong>TOTAL OWED</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayTotal.toFixed(2) + '</strong></td></tr></table>';
+      } else {
+        summaryHTML += '<tr class="total-row" style="background: ' + (displayBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayBalance.toFixed(2) + '</strong></td></tr></table>';
+      }
 
       if (displayBalance <= 0) {
         summaryHTML += '<p style="color: green; font-weight: bold; text-align: center; margin-top: 10px;">✓ Account Settled</p>';
+        if (isSold) {
+          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; font-size: 14px;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+        }
       } else {
-        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Balance Remaining: ₹' + displayBalance.toFixed(2) + '</p>';
+        const showTotal = pendingMoney > 0;
+        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Interest Balance: ₹' + displayBalance.toFixed(2) + '</p>';
+        if (pendingMoney > 0) {
+          summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; border-top: 1px solid #ddd; padding-top: 5px;">Total Owed: ₹' + displayTotal.toFixed(2) + '</p>';
+        }
       }
 
       resultDiv.innerHTML = allTablesHTML + summaryHTML;
