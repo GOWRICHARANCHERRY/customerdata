@@ -972,7 +972,8 @@
       try {
         await apiRequest('/auth/update-login-time', {
           method: 'POST',
-          body: { username, loginFrom, loginTo }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, loginFrom, loginTo })
         });
         showAdminMessage('Login time saved for ' + username, 'success');
         loadAdminDashboard();
@@ -983,7 +984,8 @@
       try {
         await apiRequest('/auth/update-login-time', {
           method: 'POST',
-          body: { username, loginFrom: null, loginTo: null }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, loginFrom: null, loginTo: null })
         });
         showAdminMessage('Login time restriction cleared for ' + username, 'success');
         loadAdminDashboard();
