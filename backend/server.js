@@ -19,23 +19,25 @@ const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',')
   : ['http://localhost:3001', 'http://localhost:5500', 'http://localhost:5501', 'http://127.0.0.1:5500'];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    const reqHost = this.headers && this.headers.host;
-    if (reqHost && origin.includes(reqHost)) return callback(null, true);
-    const isAllowed = allowedOrigins.some(o => {
-      try { return o && new URL(origin).origin === o; }
-      catch (e) { return origin === o; }
-    });
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
+app.use((req, res, next) => {
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      const reqHost = req.headers.host;
+      if (reqHost && origin.includes(reqHost)) return callback(null, true);
+      const isAllowed = allowedOrigins.some(o => {
+        try { return o && new URL(origin).origin === o; }
+        catch (e) { return origin === o; }
+      });
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true
+  })(req, res, next);
+});
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
