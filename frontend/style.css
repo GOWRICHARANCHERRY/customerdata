@@ -76,6 +76,9 @@ body {
     cursor: pointer;
     font-weight: bold;
     transition: all 0.3s ease;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
 }
 
 .logout-btn:hover {
