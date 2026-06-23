@@ -821,6 +821,7 @@
                 <input type="time" id="loginTo_${user.username}" value="${user.loginTo || ''}" style="margin-right: 10px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
                 <button class="btn btn-primary btn-small" onclick="saveLoginTime('${user.username}')">💾 Save</button>
                 <button class="btn btn-secondary btn-small" onclick="clearLoginTime('${user.username}')">✖️ Clear</button>
+                <span style="font-size: 12px; color: #666; margin-left: 8px;">🕐 ${user.timezone || 'UTC'}</span>
               </div>
             ` : ''}
             <div class="user-actions">
@@ -970,11 +971,12 @@
     async function saveLoginTime(username) {
       const loginFrom = document.getElementById('loginFrom_' + username).value;
       const loginTo = document.getElementById('loginTo_' + username).value;
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       try {
         await apiRequest('/auth/update-login-time', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, loginFrom, loginTo })
+          body: JSON.stringify({ username, loginFrom, loginTo, timezone })
         });
         showAdminMessage('Login time saved for ' + username, 'success');
         loadAdminDashboard();
@@ -986,7 +988,7 @@
         await apiRequest('/auth/update-login-time', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, loginFrom: null, loginTo: null })
+          body: JSON.stringify({ username, loginFrom: null, loginTo: null, timezone: 'UTC' })
         });
         showAdminMessage('Login time restriction cleared for ' + username, 'success');
         loadAdminDashboard();

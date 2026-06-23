@@ -6,6 +6,12 @@ const db = require('../db');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'customer-mgmt-secret-key-2024';
 
+function getCurrentTimeInTimezone(timezone) {
+  const now = new Date();
+  const parts = now.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone || 'UTC' }).split(':');
+  return parts[0] + ':' + parts[1];
+}
+
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -14,12 +20,11 @@ async function authenticateToken(req, res, next) {
   try {
     const user = jwt.verify(token, JWT_SECRET);
     if (user.role !== 'admin') {
-      const result = await db.query('SELECT "loginFrom", "loginTo" FROM users WHERE username = $1', [user.username]);
+      const result = await db.query('SELECT "loginFrom", "loginTo", timezone FROM users WHERE username = $1', [user.username]);
       if (result.rows.length > 0) {
-        const { loginFrom, loginTo } = result.rows[0];
+        const { loginFrom, loginTo, timezone } = result.rows[0];
         if (loginFrom && loginTo) {
-          const now = new Date();
-          const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+          const currentTime = getCurrentTimeInTimezone(timezone || 'UTC');
           if (currentTime < loginFrom || currentTime > loginTo) {
             return res.status(403).json({
               error: 'Session expired due to login time restriction.',
@@ -94,8 +99,7 @@ router.post('/login', async (req, res) => {
     }
 
     if (username !== 'gowricharan' && user.loginFrom && user.loginTo) {
-      const now = new Date();
-      const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const currentTime = getCurrentTimeInTimezone(user.timezone || 'UTC');
       if (currentTime < user.loginFrom || currentTime > user.loginTo) {
         return res.status(403).json({
           error: `Login restricted. Your allowed login time is ${user.loginFrom} to ${user.loginTo}.`,
@@ -159,7 +163,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", "createdAt" FROM users');
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "createdAt" FROM users');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -273,13 +277,13 @@ router.post('/toggle-access', authenticateToken, adminOnly, async (req, res) => 
 
 router.post('/update-login-time', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const { username, loginFrom, loginTo } = req.body;
+    const { username, loginFrom, loginTo, timezone } = req.body;
     const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
     if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found' });
 
     await db.query(
-      `UPDATE users SET "loginFrom" = $1, "loginTo" = $2, "updatedAt" = NOW() WHERE username = $3`,
-      [loginFrom || null, loginTo || null, username]
+      `UPDATE users SET "loginFrom" = $1, "loginTo" = $2, timezone = $3, "updatedAt" = NOW() WHERE username = $4`,
+      [loginFrom || null, loginTo || null, timezone || 'UTC', username]
     );
 
     res.json({ message: `Login time updated for ${username}` });

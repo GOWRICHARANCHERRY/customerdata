@@ -46,6 +46,7 @@ async function initialize() {
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS "loginFrom" TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS "loginTo" TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "timezone" TEXT DEFAULT 'UTC';
 
     CREATE TABLE IF NOT EXISTS customer_records (
       id TEXT PRIMARY KEY,
