@@ -331,32 +331,32 @@
 
     <div class="bill-number-section">
       <div class="bill-number-field">
-        <label>Bill Number:</label>
+        <label>Bill Number (బిల్లు నంబర్):</label>
         <input type="text" id="billNumber" placeholder="Enter Bill Number">
       </div>
-      <button class="search-btn" onclick="searchBillNumber()">Search</button>
+      <button class="search-btn" onclick="searchBillNumber()">Search (శోధించు)</button>
     </div>
 
     <div id="soldStatusContainer" style="display: none; margin-bottom: 15px;"></div>
 
-    <h3>Principal Amount Details</h3>
-    <label>Principal Amount:</label>
+    <h3>Principal Amount Details (అసలు మొత్తం వివరాలు)</h3>
+    <label>Principal Amount (అసలు మొత్తం):</label>
     <input type="number" id="amount" placeholder="Enter amount" onchange="autoSetInterestRate()">
 
-    <label>Monthly Interest Rate (%):</label>
+    <label>Monthly Interest Rate (నెలవారీ వడ్డీ రేటు %):</label>
     <input type="number" id="rate" placeholder="Enter monthly interest %" readonly style="background: #f0f0f0;">
     <small id="rateHint" style="color: #666; display: block; margin-top: 3px;"></small>
 
-    <label>Start Date:</label>
+    <label>Start Date (ప్రారంభ తేదీ):</label>
     <input type="date" id="startDate">
 
-    <label>End Date:</label>
+    <label>End Date (ముగింపు తేదీ):</label>
     <input type="date" id="endDate">
 
-    <h3>Extra Money Taken</h3>
-    <label>Number of times extra money taken:</label>
+    <h3>Extra Money Taken (తీసుకున్న అదనపు డబ్బు)</h3>
+    <label>Number of times extra money taken (ఎన్నిసార్లు అదనపు డబ్బు తీసుకున్నారు):</label>
     <select id="extraMoneyCount" onchange="generateExtraMoneyFields()">
-      <option value="0">Select number of times</option>
+      <option value="0">Select (ఎంచుకోండి)</option>
       <option value="1">1</option><option value="2">2</option><option value="3">3</option>
       <option value="4">4</option><option value="5">5</option><option value="6">6</option>
       <option value="7">7</option><option value="8">8</option><option value="9">9</option>
@@ -364,10 +364,10 @@
     </select>
     <div id="extraMoneyContainer"></div>
 
-    <h3>Money Given Back</h3>
-    <label>Number of times money given back:</label>
+    <h3>Money Given Back (తిరిగి ఇచ్చిన డబ్బు)</h3>
+    <label>Number of times money given back (ఎన్నిసార్లు డబ్బు తిరిగి ఇచ్చారు):</label>
     <select id="moneyBackCount" onchange="generateMoneyBackFields()">
-      <option value="0">Select number of times</option>
+      <option value="0">Select (ఎంచుకోండి)</option>
       <option value="1">1</option><option value="2">2</option><option value="3">3</option>
       <option value="4">4</option><option value="5">5</option><option value="6">6</option>
       <option value="7">7</option><option value="8">8</option><option value="9">9</option>
@@ -376,36 +376,36 @@
     <div id="moneyBackContainer"></div>
 
     <div class="action-buttons">
-      <button onclick="calculateInterest()">Calculate</button>
-      <button id="soldButton" class="sold-btn" onclick="markAsSold()">Sold</button>
-      <button class="history-btn" onclick="showHistory()">📜 History</button>
+      <button onclick="calculateInterest()">Calculate (లెక్కించు)</button>
+      <button id="soldButton" class="sold-btn" onclick="markAsSold()">Sold (అమ్మేశారు)</button>
+      <button class="history-btn" onclick="showHistory()">📜 History (చరిత్ర)</button>
     </div>
 
     <div id="transactionManager" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #007bff;">
-      <h3>💰 Transaction Management</h3>
-      <p style="color: #666; margin-bottom: 15px;">Quickly add transactions without opening the Data Management system</p>
+      <h3>💰 Transaction Management (లావాదేవీల నిర్వహణ)</h3>
+      <p style="color: #666; margin-bottom: 15px;">Quickly add transactions without opening the Data Management system (డేటా మేనేజ్‌మెంట్ తెరవకుండా త్వరగా లావాదేవీలు జోడించండి)</p>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
         <div>
-          <label><strong>Add Extra Money Taken:</strong></label>
-          <input type="number" id="quickExtraAmount" placeholder="Amount" style="width: 100%; margin: 5px 0;">
+          <label><strong>Add Extra Money Taken (అదనపు డబ్బు జోడించండి):</strong></label>
+          <input type="number" id="quickExtraAmount" placeholder="Amount (మొత్తం)" style="width: 100%; margin: 5px 0;">
           <input type="date" id="quickExtraDate" style="width: 100%; margin: 5px 0;">
-          <button onclick="addQuickTransaction('extra')" style="width: 100%; background: #28a745; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Add Extra Money</button>
+          <button onclick="addQuickTransaction('extra')" style="width: 100%; background: #28a745; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Add Extra Money (అదనపు డబ్బు జోడించు)</button>
         </div>
         <div>
-          <label><strong>Add Money Given Back:</strong></label>
-          <input type="number" id="quickBackAmount" placeholder="Amount" style="width: 100%; margin: 5px 0;">
+          <label><strong>Add Money Given Back (తిరిగి ఇచ్చిన డబ్బు జోడించండి):</strong></label>
+          <input type="number" id="quickBackAmount" placeholder="Amount (మొత్తం)" style="width: 100%; margin: 5px 0;">
           <input type="date" id="quickBackDate" style="width: 100%; margin: 5px 0;">
-          <button onclick="addQuickTransaction('back')" style="width: 100%; background: #ff9800; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Add Money Back</button>
+          <button onclick="addQuickTransaction('back')" style="width: 100%; background: #ff9800; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Add Money Back (డబ్బు తిరిగి ఇవ్వండి)</button>
         </div>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
         <div>
-          <label><strong>Update Pending Money:</strong></label>
-          <input type="number" id="quickPendingAmount" placeholder="Pending amount" style="width: 100%; margin: 5px 0;">
-          <button onclick="updatePendingMoney()" style="width: 100%; background: #dc3545; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Update Pending</button>
+          <label><strong>Update Pending Money (బాకీ డబ్బు నవీకరించండి):</strong></label>
+          <input type="number" id="quickPendingAmount" placeholder="Pending amount (బాకీ మొత్తం)" style="width: 100%; margin: 5px 0;">
+          <button onclick="updatePendingMoney()" style="width: 100%; background: #dc3545; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Update Pending (బాకీ నవీకరించు)</button>
         </div>
         <div style="text-align: center; padding-top: 20px;">
-          <button onclick="saveAllTransactions()" style="background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold;">💾 Save All Changes</button>
+          <button onclick="saveAllTransactions()" style="background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold;">💾 Save All Changes (అన్ని మార్పులు సేవ్ చేయండి)</button>
         </div>
       </div>
     </div>
@@ -416,7 +416,7 @@
     </div>
 
     <div style="display: flex; gap: 10px; margin-top: 10px;">
-      <button class="print-btn" onclick="window.print()">🖨️ Print Bill</button>
+      <button class="print-btn" onclick="window.print()">🖨️ Print Bill (బిల్లు ప్రింట్ చేయండి)</button>
     </div>
   </div>
 
@@ -541,12 +541,12 @@
 
           if ((foundRecord.status || '').toLowerCase() === 'sold') {
             document.getElementById('soldStatusContainer').style.display = 'block';
-            document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD</strong></div>';
+            document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD (అమ్మేశారు)</strong></div>';
             document.getElementById('soldButton').disabled = true;
-            document.getElementById('soldButton').textContent = '✅ Already Sold';
+            document.getElementById('soldButton').textContent = '✅ Already Sold (ఇప్పటికే అమ్మేశారు)';
           }
 
-          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName + ((foundRecord.status || '').toLowerCase() === 'sold' ? '\n⚠️ Status: SOLD' : ''));
+          alert('Bill found! Data auto-filled from Data Management System.\nCustomer: ' + foundRecord.customerName + ((foundRecord.status || '').toLowerCase() === 'sold' ? '\n⚠️ Status: SOLD (అమ్మేశారు)' : ''));
 
           calculateInterest();
         } else {
@@ -626,10 +626,10 @@
       const billNumber = document.getElementById('billNumber').value.trim();
       if (!billNumber) { alert('Please enter a bill number before marking as sold.'); return; }
       if (currentSearchedRecordStatus && currentSearchedRecordStatus.toLowerCase() === 'sold') {
-        alert('This bill is already marked as SOLD.');
+        alert('This bill is already marked as SOLD (ఇప్పటికే అమ్మేశారు).');
         return;
       }
-      if (!confirm('Are you sure you want to mark bill ' + billNumber + ' as SOLD?')) return;
+      if (!confirm('Are you sure you want to mark bill ' + billNumber + ' as SOLD (అమ్మినట్లు గుర్తు పెట్టాలా)?')) return;
 
       try {
         const records = await apiRequest('/customers?searchType=billNo&searchValue=' + encodeURIComponent(billNumber));
@@ -637,11 +637,11 @@
 
         if (record) {
           await apiRequest('/customers/' + record.id + '/mark-sold', { method: 'POST' });
-          alert('Bill ' + billNumber + ' marked as SOLD!\n\nRecord updated in Data Management System.');
+          alert('Bill ' + billNumber + ' marked as SOLD (అమ్మేశారు)!');
           document.getElementById('soldButton').disabled = true;
-          document.getElementById('soldButton').textContent = '✅ Already Sold';
+          document.getElementById('soldButton').textContent = '✅ Already Sold (ఇప్పటికే అమ్మేశారు)';
           document.getElementById('soldStatusContainer').style.display = 'block';
-          document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD</strong></div>';
+          document.getElementById('soldStatusContainer').innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 8px; border: 1px solid #f5c6cb; font-weight: bold; text-align: center;">⚠️ This bill is already marked as <strong>SOLD (అమ్మేశారు)</strong></div>';
           currentSearchedRecordStatus = 'sold';
           calculateInterest();
         } else {
@@ -1028,10 +1028,10 @@
         const section = document.createElement('div');
         section.className = 'extra-money-section';
         section.innerHTML = `
-          <h4>${getOrdinal(i)} Extra Money Taken</h4>
+          <h4>${getOrdinal(i)} Extra Money Taken (అదనపు డబ్బు)</h4>
           <div class="extra-money-fields">
-            <div><label>Amount:</label><input type="number" id="extraAmount${i}" placeholder="Enter extra amount"></div>
-            <div><label>Start Date:</label><input type="date" id="extraStartDate${i}"></div>
+            <div><label>Amount (మొత్తం):</label><input type="number" id="extraAmount${i}" placeholder="Enter extra amount"></div>
+            <div><label>Start Date (ప్రారంభ తేదీ):</label><input type="date" id="extraStartDate${i}"></div>
           </div>
         `;
         container.appendChild(section);
@@ -1046,10 +1046,10 @@
         const section = document.createElement('div');
         section.className = 'money-back-section';
         section.innerHTML = `
-          <h4>${getOrdinal(i)} Money Given Back</h4>
+          <h4>${getOrdinal(i)} Money Given Back (తిరిగి ఇచ్చిన డబ్బు)</h4>
           <div class="extra-money-fields">
-            <div><label>Amount:</label><input type="number" id="backAmount${i}" placeholder="Enter repayment amount"></div>
-            <div><label>Payment Date:</label><input type="date" id="backDate${i}"></div>
+            <div><label>Amount (మొత్తం):</label><input type="number" id="backAmount${i}" placeholder="Enter repayment amount"></div>
+            <div><label>Payment Date (చెల్లింపు తేదీ):</label><input type="date" id="backDate${i}"></div>
           </div>
         `;
         container.appendChild(section);
@@ -1264,7 +1264,7 @@
       let totalPayments = 0;
       let totalPaymentInterest = 0;
       if (paymentResults.length > 0) {
-        allTablesHTML += '<h3>Payments Made</h3>';
+        allTablesHTML += '<h3>Payments Made (చెల్లింపులు చేశారు)</h3>';
         paymentResults.forEach(payment => {
           allTablesHTML += '<h4>' + payment.title + '</h4>';
           allTablesHTML += payment.tableHTML;
@@ -1279,28 +1279,28 @@
 
       let billHeader = document.getElementById("billHeader");
       const isSold = (currentSearchedRecordStatus || '').toLowerCase() === 'sold';
-      const soldStatus = isSold ? ' <span class="sold-badge">Already Sold</span>' : '';
-      let headerHtml = '<h3>Bill Number: ' + billNumber + soldStatus + '</h3>';
+      const soldStatus = isSold ? ' <span class="sold-badge">Already Sold (ఇప్పటికే అమ్మేశారు)</span>' : '';
+      let headerHtml = '<h3>Bill Number (బిల్లు నంబర్): ' + billNumber + soldStatus + '</h3>';
       if (isSold) {
-        headerHtml += '<p style="font-weight: bold; color: #28a745; margin: 5px 0 0 0;">Balance Remaining: ₹0.00 <span style="font-weight: normal; color: #666; font-size: 13px;">(settled on sale)</span></p>';
-        headerHtml += '<p style="font-weight: bold; color: #333; margin: 3px 0 0 0;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+        headerHtml += '<p style="font-weight: bold; color: #28a745; margin: 5px 0 0 0;">Balance Remaining: ₹0.00 <span style="font-weight: normal; color: #666; font-size: 13px;">(settled on sale / అమ్మకంపై సెటిల్ అయింది)</span></p>';
+        headerHtml += '<p style="font-weight: bold; color: #333; margin: 3px 0 0 0;">Amount Paid (చెల్లించిన మొత్తం): ₹' + finalBalance.toFixed(2) + '</p>';
         if (pendingMoney > 0) {
-          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money (బాకీ డబ్బు): ₹' + pendingMoney.toFixed(2) + '</p>';
         }
       } else {
-        headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Interest Balance: ₹' + finalBalance.toFixed(2) + '</p>';
+        headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Interest Balance (వడ్డీ బ్యాలెన్స్): ₹' + finalBalance.toFixed(2) + '</p>';
         if (pendingMoney > 0) {
-          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
-          headerHtml += '<p style="font-weight: bold; color: #333; margin: 5px 0 0 0; border-top: 1px solid #ddd; padding-top: 3px;">Total Owed: ₹' + totalOwed.toFixed(2) + '</p>';
+          headerHtml += '<p style="font-weight: bold; color: #dc3545; margin: 3px 0 0 0;">Pending Money (బాకీ డబ్బు): ₹' + pendingMoney.toFixed(2) + '</p>';
+          headerHtml += '<p style="font-weight: bold; color: #333; margin: 5px 0 0 0; border-top: 1px solid #ddd; padding-top: 3px;">Total Owed (మొత్తం బాకీ): ₹' + totalOwed.toFixed(2) + '</p>';
         }
       }
       billHeader.innerHTML = headerHtml;
 
       let summaryHTML = `
-        <h3>Summary</h3>
+        <h3>Summary (సారాంశం)</h3>
         <p style="font-size: 14px; color: #666; margin-bottom: 10px;">${rateNote}</p>
         <table class="summary-table">
-          <tr><th>Description</th><th>Period</th><th>Principal</th><th>Total Interest</th><th>Final Amount</th></tr>
+          <tr><th>Description (వివరణ)</th><th>Period (వ్యవధి)</th><th>Principal (అసలు)</th><th>Total Interest (మొత్తం వడ్డీ)</th><th>Final Amount (చివరి మొత్తం)</th></tr>
       `;
 
       allResults.forEach(result => {
@@ -1308,42 +1308,42 @@
       });
 
       let totalPrincipalAll = allResults.reduce((sum, result) => sum + result.principal, 0);
-      summaryHTML += '<tr class="total-row"><td><strong>TOTAL BORROWED</strong></td><td><strong>-</strong></td><td><strong>' + totalPrincipalAll.toFixed(2) + '</strong></td><td><strong>' + grandTotalInterest.toFixed(2) + '</strong></td><td><strong>' + grandTotalAmount.toFixed(2) + '</strong></td></tr>';
+      summaryHTML += '<tr class="total-row"><td><strong>TOTAL BORROWED (మొత్తం తీసుకున్నది)</strong></td><td><strong>-</strong></td><td><strong>' + totalPrincipalAll.toFixed(2) + '</strong></td><td><strong>' + grandTotalInterest.toFixed(2) + '</strong></td><td><strong>' + grandTotalAmount.toFixed(2) + '</strong></td></tr>';
 
       if (paymentResults.length > 0) {
         paymentResults.forEach(payment => {
           summaryHTML += '<tr class="payment-row"><td>' + payment.title + '</td><td>' + payment.period + '</td><td>-' + payment.principal.toFixed(2) + '</td><td>-' + payment.totalInterest.toFixed(2) + '</td><td>-' + payment.totalAmount.toFixed(2) + '</td></tr>';
         });
-        summaryHTML += '<tr class="payment-row"><td><strong>TOTAL PAYMENTS</strong></td><td><strong>-</strong></td><td><strong>-' + paymentResults.reduce((sum, p) => sum + p.principal, 0).toFixed(2) + '</strong></td><td><strong>-' + totalPaymentInterest.toFixed(2) + '</strong></td><td><strong>-' + totalPayments.toFixed(2) + '</strong></td></tr>';
+        summaryHTML += '<tr class="payment-row"><td><strong>TOTAL PAYMENTS (మొత్తం చెల్లింపులు)</strong></td><td><strong>-</strong></td><td><strong>-' + paymentResults.reduce((sum, p) => sum + p.principal, 0).toFixed(2) + '</strong></td><td><strong>-' + totalPaymentInterest.toFixed(2) + '</strong></td><td><strong>-' + totalPayments.toFixed(2) + '</strong></td></tr>';
       }
 
       if (!isSold && pendingMoney > 0) {
-        summaryHTML += '<tr class="pending-row"><td><strong>PENDING MONEY</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong style="color: #dc3545;">+' + pendingMoney.toFixed(2) + '</strong></td></tr>';
+        summaryHTML += '<tr class="pending-row"><td><strong>PENDING MONEY (బాకీ డబ్బు)</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong style="color: #dc3545;">+' + pendingMoney.toFixed(2) + '</strong></td></tr>';
       }
 
       const displayBalance = isSold ? 0 : finalBalance;
       const displayTotal = isSold ? 0 : totalOwed;
 
       if (!isSold && pendingMoney > 0) {
-        summaryHTML += '<tr class="total-row" style="background: #ffeeba;"><td><strong>TOTAL OWED</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayTotal.toFixed(2) + '</strong></td></tr></table>';
+        summaryHTML += '<tr class="total-row" style="background: #ffeeba;"><td><strong>TOTAL OWED (మొత్తం బాకీ)</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayTotal.toFixed(2) + '</strong></td></tr></table>';
       } else {
-        summaryHTML += '<tr class="total-row" style="background: ' + (displayBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayBalance.toFixed(2) + '</strong></td></tr></table>';
+        summaryHTML += '<tr class="total-row" style="background: ' + (displayBalance <= 0 ? '#d4edda' : '#f8d7da') + ';"><td><strong>FINAL BALANCE (చివరి బ్యాలెన్స్)</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>-</strong></td><td><strong>' + displayBalance.toFixed(2) + '</strong></td></tr></table>';
       }
 
       if (displayBalance <= 0) {
-        summaryHTML += '<p style="color: green; font-weight: bold; text-align: center; margin-top: 10px;">✓ Account Settled</p>';
+        summaryHTML += '<p style="color: green; font-weight: bold; text-align: center; margin-top: 10px;">✓ Account Settled (ఖాతా సెటిల్ అయింది)</p>';
         if (isSold) {
-          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; font-size: 14px;">Amount Paid: ₹' + finalBalance.toFixed(2) + '</p>';
+          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; font-size: 14px;">Amount Paid (చెల్లించిన మొత్తం): ₹' + finalBalance.toFixed(2) + '</p>';
           if (pendingMoney > 0) {
-            summaryHTML += '<p style="color: #dc3545; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
+            summaryHTML += '<p style="color: #dc3545; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money (బాకీ డబ్బు): ₹' + pendingMoney.toFixed(2) + '</p>';
           }
         }
       } else {
         const showTotal = pendingMoney > 0;
-        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Interest Balance: ₹' + displayBalance.toFixed(2) + '</p>';
+        summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 10px;">Interest Balance (వడ్డీ బ్యాలెన్స్): ₹' + displayBalance.toFixed(2) + '</p>';
         if (pendingMoney > 0) {
-          summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money: ₹' + pendingMoney.toFixed(2) + '</p>';
-          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; border-top: 1px solid #ddd; padding-top: 5px;">Total Owed: ₹' + displayTotal.toFixed(2) + '</p>';
+          summaryHTML += '<p style="color: red; font-weight: bold; text-align: center; margin-top: 2px;">Pending Money (బాకీ డబ్బు): ₹' + pendingMoney.toFixed(2) + '</p>';
+          summaryHTML += '<p style="color: #333; font-weight: bold; text-align: center; margin-top: 2px; border-top: 1px solid #ddd; padding-top: 5px;">Total Owed (మొత్తం బాకీ): ₹' + displayTotal.toFixed(2) + '</p>';
         }
       }
 
