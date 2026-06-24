@@ -1059,16 +1059,25 @@
 
         function enableScreenshotProtection() {
             document.body.classList.add('screenshot-protected');
+            const overlay = document.createElement('div');
+            overlay.id = 'screenshotOverlay';
+            overlay.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;z-index:999999;justify-content:center;align-items:center;flex-direction:column;font-size:24px;text-align:center;';
+            overlay.innerHTML = '<div style="font-size:80px;margin-bottom:20px;">🚫</div><div>Content Protected</div><div style="font-size:14px;margin-top:10px;color:#999;">Screenshot not allowed</div>';
+            document.body.appendChild(overlay);
             document.addEventListener('contextmenu', e => e.preventDefault());
             document.addEventListener('copy', e => e.preventDefault());
             document.addEventListener('cut', e => e.preventDefault());
             document.addEventListener('keydown', e => { if (e.key === 'PrintScreen') { e.preventDefault(); alert('Screenshots are disabled.'); } });
             document.addEventListener('visibilitychange', () => {
-                if (document.hidden) { document.body.style.filter = 'blur(20px)'; }
-                else { document.body.style.filter = ''; }
+                overlay.style.display = document.hidden ? 'flex' : 'none';
             });
-            window.addEventListener('blur', () => { document.body.style.filter = 'blur(20px)'; });
-            window.addEventListener('focus', () => { document.body.style.filter = ''; });
+            window.addEventListener('blur', () => { overlay.style.display = 'flex'; });
+            window.addEventListener('focus', () => { overlay.style.display = 'none'; });
+
+            // Reapply overlay if user switches apps (works on many Android skins)
+            document.addEventListener('touchstart', () => {
+                if (document.hidden) overlay.style.display = 'flex';
+            });
         }
 
         function clearAllData() {
