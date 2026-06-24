@@ -77,6 +77,20 @@ function checkAuthentication() {
 
   const roleText = currentUser.role === 'admin' ? ' (Admin)' : '';
   document.getElementById('currentUserName').textContent = 'Welcome, ' + currentUser.username + '!' + roleText;
+
+  if (currentUser.screenshotRestricted) {
+    document.body.classList.add('screenshot-protected');
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('copy', e => e.preventDefault());
+    document.addEventListener('cut', e => e.preventDefault());
+    document.addEventListener('keydown', e => { if (e.key === 'PrintScreen') { e.preventDefault(); alert('Screenshots are disabled.'); } });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { document.body.style.filter = 'blur(20px)'; }
+      else { document.body.style.filter = ''; }
+    });
+    window.addEventListener('blur', () => { document.body.style.filter = 'blur(20px)'; });
+    window.addEventListener('focus', () => { document.body.style.filter = ''; });
+  }
 }
 
 function logout() {

@@ -620,3 +620,6 @@ body {
     .select-all-container { flex-wrap: wrap; }
     .btn-small { padding: 8px 12px; font-size: 12px; min-height: 36px; }
 }
+
+.screenshot-protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media print { .screenshot-protected { display: none !important; } }

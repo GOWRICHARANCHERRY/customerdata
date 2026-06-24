@@ -226,6 +226,7 @@
       #printSection, #printSection * { visibility: visible; }
       #printSection { position: absolute; left: 0; top: 0; width: 100%; }
     }
+    .screenshot-protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
     @media (max-width: 600px) {
       body { padding: 10px; }
@@ -493,6 +494,20 @@
           const dataEntryLink = document.querySelector('.nav-data-entry');
           if (dataEntryLink) dataEntryLink.style.display = 'none';
         }
+      }
+
+      if (currentUser.screenshotRestricted) {
+        document.body.classList.add('screenshot-protected');
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('copy', e => e.preventDefault());
+        document.addEventListener('cut', e => e.preventDefault());
+        document.addEventListener('keydown', e => { if (e.key === 'PrintScreen') { e.preventDefault(); alert('Screenshots are disabled.'); } });
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) { document.body.style.filter = 'blur(20px)'; }
+          else { document.body.style.filter = ''; }
+        });
+        window.addEventListener('blur', () => { document.body.style.filter = 'blur(20px)'; });
+        window.addEventListener('focus', () => { document.body.style.filter = ''; });
       }
     }
 
@@ -815,6 +830,7 @@
           const excelStatus = user.excelAccess ? 'Yes' : 'No';
           const auditStatus = user.auditAccess ? 'Yes' : 'No';
           const analyticsStatus = user.analyticsAccess ? 'Yes' : 'No';
+          const screenshotStatus = user.screenshotRestricted ? 'Yes' : 'No';
 
           userCard.innerHTML = `
             <h4>👤 ${user.username}</h4>
@@ -825,6 +841,7 @@
               <li>Excel Import/Export: ${excelStatus}</li>
               <li>Audit Logs: ${auditStatus}</li>
               <li>Analytics: ${analyticsStatus}</li>
+              <li>🚫 Screenshot Block: ${screenshotStatus}</li>
             </ul>
             ${user.approved ? `
               <div class="login-time-controls" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
@@ -862,6 +879,7 @@
               ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'excelAccess')">${user.excelAccess ? 'Revoke' : 'Grant'} Excel Access</button>` : ''}
               ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'auditAccess')">${user.auditAccess ? 'Revoke' : 'Grant'} Audit Access</button>` : ''}
               ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'analyticsAccess')">${user.analyticsAccess ? 'Revoke' : 'Grant'} Analytics Access</button>` : ''}
+              ${user.approved ? `<button class="btn btn-small" style="background: #e83e8c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;" onclick="toggleAccess('${user.username}', 'screenshotRestricted')">${user.screenshotRestricted ? 'Disable' : 'Enable'} Screenshot Block</button>` : ''}
               <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">🗑️ Delete</button>
             </div>
           `;

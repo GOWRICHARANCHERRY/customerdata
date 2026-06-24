@@ -79,11 +79,8 @@ router.post('/signup', async (req, res) => {
     if (!USERNAME_REGEX.test(username)) {
       return res.status(400).json({ error: 'Username must be 3-30 alphanumeric characters or underscores' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
-      return res.status(400).json({ error: 'Password must contain uppercase, lowercase, and a number' });
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
     if (username.toLowerCase() === 'gowricharan') {
@@ -153,7 +150,9 @@ router.post('/login', async (req, res) => {
         excelAccess: !!user.excelAccess,
         auditAccess: !!user.auditAccess,
         analyticsAccess: !!user.analyticsAccess,
-        locationRestricted: !!user.locationRestricted,
+        screenshotRestricted: !!user.screenshotRestricted,
+      screenshotRestricted: !!user.screenshotRestricted,
+      locationRestricted: !!user.locationRestricted,
         lat: user.lat,
         lng: user.lng,
         radius: user.radius
@@ -170,11 +169,8 @@ router.post('/forgot-password', async (req, res) => {
     if (!username || !newPassword) {
       return res.status(400).json({ error: 'Username and new password are required' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
-      return res.status(400).json({ error: 'Password must contain uppercase, lowercase, and a number' });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
     if (username.toLowerCase() === 'gowricharan') {
@@ -192,7 +188,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "locationRestricted", lat, lng, radius, "createdAt" FROM users ORDER BY username');
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "screenshotRestricted", "loginFrom", "loginTo", timezone, "locationRestricted", lat, lng, radius, "createdAt" FROM users ORDER BY username');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
@@ -283,7 +279,7 @@ router.post('/reject-password-reset', authenticateToken, adminOnly, async (req, 
 router.post('/toggle-access', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username, accessType } = req.body;
-    const validTypes = ['dataEntryAccess', 'excelAccess', 'auditAccess', 'analyticsAccess'];
+    const validTypes = ['dataEntryAccess', 'excelAccess', 'auditAccess', 'analyticsAccess', 'screenshotRestricted'];
     if (!validTypes.includes(accessType)) {
       return res.status(400).json({ error: 'Invalid access type' });
     }
@@ -377,7 +373,7 @@ router.delete('/delete-user/:username', authenticateToken, adminOnly, async (req
 
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "locationRestricted", lat, lng, radius FROM users WHERE username = $1', [req.user.username]);
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "screenshotRestricted", "locationRestricted", lat, lng, radius FROM users WHERE username = $1', [req.user.username]);
     const user = result.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({

@@ -531,6 +531,10 @@
                     startLocationWatch(data.user.lat, data.user.lng, data.user.radius);
                 }
 
+                if (data.user.screenshotRestricted) {
+                    enableScreenshotProtection();
+                }
+
                 setTimeout(() => {
                     if (data.user.role === 'admin') {
                         showAdminDashboard();
@@ -650,6 +654,7 @@
                     const excelStatus = user.excelAccess ? 'Yes' : 'No';
                     const auditStatus = user.auditAccess ? 'Yes' : 'No';
                     const analyticsStatus = user.analyticsAccess ? 'Yes' : 'No';
+                    const screenshotStatus = user.screenshotRestricted ? 'Yes' : 'No';
 
                     userCard.innerHTML = `
                         <h4>👤 ${user.username}</h4>
@@ -660,6 +665,7 @@
                             <li>Excel Import/Export: ${excelStatus}</li>
                             <li>Audit Logs: ${auditStatus}</li>
                             <li>Analytics: ${analyticsStatus}</li>
+                            <li>🚫 Screenshot Block: ${screenshotStatus}</li>
                         </ul>
                         <div class="user-actions">
                             ${!user.approved ? `<button class="btn btn-success btn-small" onclick="approveUser('${user.username}')">✅ Approve</button>` : ''}
@@ -667,6 +673,7 @@
                             ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'excelAccess')">${user.excelAccess ? 'Revoke' : 'Grant'} Excel Access</button>` : ''}
                             ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'auditAccess')">${user.auditAccess ? 'Revoke' : 'Grant'} Audit Access</button>` : ''}
                             ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'analyticsAccess')">${user.analyticsAccess ? 'Revoke' : 'Grant'} Analytics Access</button>` : ''}
+                            ${user.approved ? `<button class="btn btn-small" style="background: #e83e8c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;" onclick="toggleAccess('${user.username}', 'screenshotRestricted')">${user.screenshotRestricted ? 'Disable' : 'Enable'} Screenshot Block</button>` : ''}
                             <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">🗑️ Delete</button>
                         </div>
                         <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
@@ -1048,6 +1055,20 @@
             localStorage.removeItem('token');
             localStorage.removeItem('currentUser');
             window.location.href = 'login.html';
+        }
+
+        function enableScreenshotProtection() {
+            document.body.classList.add('screenshot-protected');
+            document.addEventListener('contextmenu', e => e.preventDefault());
+            document.addEventListener('copy', e => e.preventDefault());
+            document.addEventListener('cut', e => e.preventDefault());
+            document.addEventListener('keydown', e => { if (e.key === 'PrintScreen') { e.preventDefault(); alert('Screenshots are disabled.'); } });
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) { document.body.style.filter = 'blur(20px)'; }
+                else { document.body.style.filter = ''; }
+            });
+            window.addEventListener('blur', () => { document.body.style.filter = 'blur(20px)'; });
+            window.addEventListener('focus', () => { document.body.style.filter = ''; });
         }
 
         function clearAllData() {
