@@ -152,7 +152,11 @@ router.post('/login', async (req, res) => {
         dataEntryAccess: !!user.dataEntryAccess,
         excelAccess: !!user.excelAccess,
         auditAccess: !!user.auditAccess,
-        analyticsAccess: !!user.analyticsAccess
+        analyticsAccess: !!user.analyticsAccess,
+        locationRestricted: !!user.locationRestricted,
+        lat: user.lat,
+        lng: user.lng,
+        radius: user.radius
       }
     });
   } catch (err) {
@@ -188,7 +192,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/users', authenticateToken, adminOnly, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "createdAt" FROM users ORDER BY username');
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "loginFrom", "loginTo", timezone, "locationRestricted", lat, lng, radius, "createdAt" FROM users ORDER BY username');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
@@ -325,6 +329,39 @@ router.post('/update-login-time', authenticateToken, adminOnly, async (req, res)
   }
 });
 
+router.post('/update-location-restriction', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { username, locationRestricted, lat, lng, radius } = req.body;
+
+    const userResult = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found' });
+
+    await db.query(
+      `UPDATE users SET "locationRestricted" = $1, lat = $2, lng = $3, radius = $4, "updatedAt" = NOW() WHERE username = $5`,
+      [locationRestricted ? 1 : 0, lat || null, lng || null, radius || 500, username]
+    );
+
+    res.json({ message: `Location restriction updated for ${username}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/clear-location-restriction', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    await db.query(
+      `UPDATE users SET "locationRestricted" = 0, lat = NULL, lng = NULL, radius = 500, "updatedAt" = NOW() WHERE username = $1`,
+      [username]
+    );
+
+    res.json({ message: `Location restriction cleared for ${username}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.delete('/delete-user/:username', authenticateToken, adminOnly, async (req, res) => {
   try {
     const { username } = req.params;
@@ -340,7 +377,7 @@ router.delete('/delete-user/:username', authenticateToken, adminOnly, async (req
 
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess" FROM users WHERE username = $1', [req.user.username]);
+    const result = await db.query('SELECT id, username, role, approved, "dataEntryAccess", "excelAccess", "auditAccess", "analyticsAccess", "locationRestricted", lat, lng, radius FROM users WHERE username = $1', [req.user.username]);
     const user = result.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({
@@ -349,7 +386,11 @@ router.get('/me', authenticateToken, async (req, res) => {
       dataEntryAccess: !!user.dataEntryAccess,
       excelAccess: !!user.excelAccess,
       auditAccess: !!user.auditAccess,
-      analyticsAccess: !!user.analyticsAccess
+      analyticsAccess: !!user.analyticsAccess,
+      locationRestricted: !!user.locationRestricted,
+      lat: user.lat,
+      lng: user.lng,
+      radius: user.radius
     });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });

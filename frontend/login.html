@@ -527,6 +527,10 @@
                 localStorage.setItem('currentUser', JSON.stringify(data.user));
                 showMessage('loginMessage', 'Login successful!', 'success');
 
+                if (data.user.locationRestricted && data.user.lat && data.user.lng && data.user.radius) {
+                    startLocationWatch(data.user.lat, data.user.lng, data.user.radius);
+                }
+
                 setTimeout(() => {
                     if (data.user.role === 'admin') {
                         showAdminDashboard();
@@ -665,6 +669,25 @@
                             ${user.approved ? `<button class="btn btn-warning btn-small" onclick="toggleAccess('${user.username}', 'analyticsAccess')">${user.analyticsAccess ? 'Revoke' : 'Grant'} Analytics Access</button>` : ''}
                             <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">🗑️ Delete</button>
                         </div>
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
+                            <p><strong>📍 Location Restriction:</strong> ${user.locationRestricted ? '✅ Enabled' : '❌ Disabled'}</p>
+                            ${user.approved ? `
+                                <button class="btn btn-small" style="background: #6f42c1; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 5px;" onclick="toggleLocationRestriction('${user.username}', ${user.locationRestricted})">
+                                    ${user.locationRestricted ? 'Disable' : 'Enable'} Location Restriction
+                                </button>
+                            ` : ''}
+                            ${user.locationRestricted ? `
+                                <div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                                    <label style="font-size: 12px; display: block;">Latitude:</label>
+                                    <input type="number" step="any" id="locLat_${user.username}" value="${user.lat || 14.684097896153538}" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; margin-bottom: 4px;">
+                                    <label style="font-size: 12px; display: block;">Longitude:</label>
+                                    <input type="number" step="any" id="locLng_${user.username}" value="${user.lng || 80.05336084202094}" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; margin-bottom: 4px;">
+                                    <label style="font-size: 12px; display: block;">Radius (meters):</label>
+                                    <input type="number" id="locRadius_${user.username}" value="${user.radius || 500}" style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; margin-bottom: 4px;">
+                                    <button class="btn btn-primary btn-small" onclick="saveLocationRestriction('${user.username}')" style="font-size: 11px; padding: 4px 8px;">💾 Save Location</button>
+                                </div>
+                            ` : ''}
+                        </div>
                     `;
                     container.appendChild(userCard);
                 });
@@ -791,6 +814,59 @@
                 loadAdminData();
             } catch (err) {
                 showMessage('adminMessage', 'Error toggling access.', 'error');
+            }
+        }
+
+        async function toggleLocationRestriction(username, currentValue) {
+            if (currentValue) {
+                if (!confirm(`Disable location restriction for ${username}?`)) return;
+                try {
+                    const res = await fetch(API_BASE + '/auth/clear-location-restriction', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await handleResponse(res);
+                    showMessage('adminMessage', `Location restriction disabled for ${username}!`, 'success');
+                    loadAdminData();
+                } catch (err) {
+                    showMessage('adminMessage', 'Error clearing location restriction.', 'error');
+                }
+            } else {
+                try {
+                    const res = await fetch(API_BASE + '/auth/update-location-restriction', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({ username, locationRestricted: true, lat: 14.684097896153538, lng: 80.05336084202094, radius: 500 })
+                    });
+                    const data = await handleResponse(res);
+                    showMessage('adminMessage', `Location restriction enabled for ${username}!`, 'success');
+                    loadAdminData();
+                } catch (err) {
+                    showMessage('adminMessage', 'Error enabling location restriction.', 'error');
+                }
+            }
+        }
+
+        async function saveLocationRestriction(username) {
+            const lat = parseFloat(document.getElementById('locLat_' + username).value);
+            const lng = parseFloat(document.getElementById('locLng_' + username).value);
+            const radius = parseFloat(document.getElementById('locRadius_' + username).value) || 500;
+            if (isNaN(lat) || isNaN(lng)) {
+                showMessage('adminMessage', 'Please enter valid latitude and longitude.', 'error');
+                return;
+            }
+            try {
+                const res = await fetch(API_BASE + '/auth/update-location-restriction', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username, locationRestricted: true, lat, lng, radius })
+                });
+                const data = await handleResponse(res);
+                showMessage('adminMessage', `Location saved for ${username}!`, 'success');
+                loadAdminData();
+            } catch (err) {
+                showMessage('adminMessage', 'Error saving location.', 'error');
             }
         }
 
@@ -926,6 +1002,52 @@
             document.getElementById('signupMessage').innerHTML = '';
             document.getElementById('forgotMessage').innerHTML = '';
             document.getElementById('adminMessage').innerHTML = '';
+        }
+
+        let locationWatchId = null;
+
+        function startLocationWatch(targetLat, targetLng, maxRadius) {
+            if (!navigator.geolocation) {
+                alert('Geolocation not supported. Location access is required for this account.');
+                forceLogout();
+                return;
+            }
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371000;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return R * c;
+            }
+            function onPosition(position) {
+                const dist = calculateDistance(targetLat, targetLng, position.coords.latitude, position.coords.longitude);
+                if (dist > maxRadius) {
+                    alert('You left the allowed location. Logging out.');
+                    forceLogout();
+                }
+            }
+            function onError(error) {
+                alert('Unable to verify location. Location access is required.');
+                forceLogout();
+            }
+            locationWatchId = navigator.geolocation.watchPosition(onPosition, onError, {
+                enableHighAccuracy: true,
+                maximumAge: 30000,
+                timeout: 10000
+            });
+        }
+
+        function forceLogout() {
+            if (locationWatchId !== null) {
+                navigator.geolocation.clearWatch(locationWatchId);
+                locationWatchId = null;
+            }
+            localStorage.removeItem('token');
+            localStorage.removeItem('currentUser');
+            window.location.href = 'login.html';
         }
 
         function clearAllData() {

@@ -52,6 +52,10 @@ function checkAuthentication() {
     return;
   }
 
+  if (currentUser.locationRestricted && currentUser.lat && currentUser.lng && currentUser.radius) {
+    startLocationWatch(currentUser.lat, currentUser.lng, currentUser.radius);
+  }
+
   if (currentUser.role !== 'admin') {
     if (!currentUser.dataEntryAccess) {
       alert('Access Denied: You do not have permission to access the Data Entry system.');
@@ -1295,3 +1299,49 @@ document.addEventListener('keydown', function (event) {
     closeHistoryModal();
   }
 });
+
+let locationWatchId = null;
+
+function startLocationWatch(targetLat, targetLng, maxRadius) {
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported. Location access is required for this account.');
+    forceLogout();
+    return;
+  }
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+  function onPosition(position) {
+    const dist = calculateDistance(targetLat, targetLng, position.coords.latitude, position.coords.longitude);
+    if (dist > maxRadius) {
+      alert('You left the allowed location. Logging out.');
+      forceLogout();
+    }
+  }
+  function onError(error) {
+    alert('Unable to verify location. Location access is required.');
+    forceLogout();
+  }
+  locationWatchId = navigator.geolocation.watchPosition(onPosition, onError, {
+    enableHighAccuracy: true,
+    maximumAge: 30000,
+    timeout: 10000
+  });
+}
+
+function forceLogout() {
+  if (locationWatchId !== null) {
+    navigator.geolocation.clearWatch(locationWatchId);
+    locationWatchId = null;
+  }
+  localStorage.removeItem('token');
+  localStorage.removeItem('currentUser');
+  window.location.href = 'login.html';
+}
