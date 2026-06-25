@@ -28,6 +28,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String APP_URL = "https://customer-app-ohm2.onrender.com";
     private static final int LOCATION_PERMISSION_REQUEST = 100;
     private boolean locationPermissionGranted = false;
+    private boolean firstLoad = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +65,15 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                // First page load: clear localStorage in the correct origin context and reload
+                if (firstLoad && url.startsWith(APP_URL)) {
+                    firstLoad = false;
+                    view.evaluateJavascript(
+                        "localStorage.clear(); sessionStorage.clear(); window.location.href = '" + APP_URL + "';",
+                        null
+                    );
+                    return;
+                }
                 swipeRefresh.setRefreshing(false);
             }
         });
@@ -77,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
 
         swipeRefresh.setOnRefreshListener(() -> webView.reload());
 
-        // Ask for location permission on Android 6+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -86,24 +95,12 @@ public class MainActivity extends AppCompatActivity {
                         LOCATION_PERMISSION_REQUEST);
             } else {
                 locationPermissionGranted = true;
-                loadApp();
+                webView.loadUrl(APP_URL);
             }
         } else {
             locationPermissionGranted = true;
-            loadApp();
+            webView.loadUrl(APP_URL);
         }
-    }
-
-    private void loadApp() {
-        String clearScript =
-            "<!DOCTYPE html>" +
-            "<html><body><script>" +
-            "localStorage.clear();" +
-            "sessionStorage.clear();" +
-            "window.location.href = '" + APP_URL + "';" +
-            "</script></body></html>";
-
-        webView.loadDataWithBaseURL(APP_URL, clearScript, "text/html", "UTF-8", null);
     }
 
     @Override
@@ -113,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == LOCATION_PERMISSION_REQUEST) {
             locationPermissionGranted = grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            loadApp();
+            webView.loadUrl(APP_URL);
         }
     }
 

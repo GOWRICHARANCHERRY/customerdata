@@ -1327,14 +1327,27 @@ function startLocationWatch(targetLat, targetLng, maxRadius) {
       forceLogout();
     }
   }
+  let retries = 0;
   function onError(error) {
-    alert('Unable to verify location. Location access is required.');
-    forceLogout();
+    if (error.code === 1) {
+      alert('Location permission denied. Location access is required for this account.');
+      forceLogout();
+    } else if (retries < 3) {
+      retries++;
+      locationWatchId = navigator.geolocation.watchPosition(onPosition, onError, {
+        enableHighAccuracy: true,
+        maximumAge: 30000,
+        timeout: 15000
+      });
+    } else {
+      alert('Unable to verify location after multiple attempts. Location access is required.');
+      forceLogout();
+    }
   }
   locationWatchId = navigator.geolocation.watchPosition(onPosition, onError, {
     enableHighAccuracy: true,
     maximumAge: 30000,
-    timeout: 10000
+    timeout: 15000
   });
 }
 
