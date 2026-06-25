@@ -1,10 +1,13 @@
 package com.customerapp;
 
+import android.os.Build;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -31,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
         swipeRefresh = findViewById(R.id.swipe_refresh);
         webView = findViewById(R.id.webview);
 
-        // WebView settings
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -41,7 +43,17 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+
+        // Clear all caches
+        webView.clearCache(true);
+        webView.clearHistory();
+        webView.clearFormData();
+        CookieManager.getInstance().removeAllCookies(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            CookieManager.getInstance().flush();
+        }
+        WebStorage.getInstance().deleteAllData();
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -52,11 +64,18 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebChromeClient(new WebChromeClient());
 
-        // Pull-to-refresh
         swipeRefresh.setOnRefreshListener(() -> webView.reload());
 
-        // Load the app
-        webView.loadUrl(APP_URL);
+        // First load a local page that clears ALL web storage, then redirects to the app
+        String clearScript =
+            "<!DOCTYPE html>" +
+            "<html><body><script>" +
+            "localStorage.clear();" +
+            "sessionStorage.clear();" +
+            "window.location.href = '" + APP_URL + "';" +
+            "</script></body></html>";
+
+        webView.loadDataWithBaseURL(APP_URL, clearScript, "text/html", "UTF-8", null);
     }
 
     @Override
