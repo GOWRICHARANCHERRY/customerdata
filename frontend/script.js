@@ -66,13 +66,13 @@ function checkAuthentication() {
       document.querySelector('.tab[onclick="showTab(\'excel\')"]').style.display = 'none';
     }
     if (!currentUser.auditAccess) {
-      document.getElementById('auditTab').style.display = 'none';
+      document.getElementById('auditTabBtn').style.display = 'none';
     }
     if (!currentUser.analyticsAccess) {
       document.querySelector('.tab[onclick="showTab(\'analytics\')"]').style.display = 'none';
     }
   } else {
-    document.getElementById('auditTab').style.display = 'block';
+    document.getElementById('auditTabBtn').style.display = 'block';
   }
 
   const roleText = currentUser.role === 'admin' ? ' (Admin)' : '';
