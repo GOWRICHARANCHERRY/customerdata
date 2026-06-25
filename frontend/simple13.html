@@ -405,7 +405,6 @@
           <button onclick="updatePendingMoney()" style="width: 100%; background: #dc3545; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Update Pending (బాకీ నవీకరించు)</button>
         </div>
         <div style="text-align: center; padding-top: 20px;">
-          <button onclick="saveAllTransactions()" style="background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold;">💾 Save All Changes (అన్ని మార్పులు సేవ్ చేయండి)</button>
         </div>
       </div>
     </div>
@@ -1411,6 +1410,7 @@
       }
 
       resultDiv.innerHTML = allTablesHTML + summaryHTML;
+      saveAllTransactions();
     }
 
     function calcPeriod(principal, rate, startDate, endDate) {

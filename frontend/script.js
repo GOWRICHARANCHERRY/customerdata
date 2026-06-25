@@ -78,7 +78,6 @@ function checkAuthentication() {
   const roleText = currentUser.role === 'admin' ? ' (Admin)' : '';
   document.getElementById('currentUserName').textContent = 'Welcome, ' + currentUser.username + '!' + roleText;
 
-  }
 }
 
 function logout() {
