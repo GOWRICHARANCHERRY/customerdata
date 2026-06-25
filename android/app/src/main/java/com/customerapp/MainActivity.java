@@ -1,9 +1,12 @@
 package com.customerapp;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.WindowManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -11,7 +14,10 @@ import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 public class MainActivity extends AppCompatActivity {
@@ -19,14 +25,14 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private SwipeRefreshLayout swipeRefresh;
 
-    // CHANGE THIS to your Render URL
     private static final String APP_URL = "https://customer-app-ohm2.onrender.com";
+    private static final int LOCATION_PERMISSION_REQUEST = 100;
+    private boolean locationPermissionGranted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // BLOCK SCREENSHOTS AND SCREEN RECORDING — OS level, cannot be bypassed
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         setContentView(R.layout.activity_main);
@@ -44,8 +50,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        settings.setGeolocationEnabled(true);
 
-        // Clear all caches
         webView.clearCache(true);
         webView.clearHistory();
         webView.clearFormData();
@@ -62,11 +68,33 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                callback.invoke(origin, true, false);
+            }
+        });
 
         swipeRefresh.setOnRefreshListener(() -> webView.reload());
 
-        // First load a local page that clears ALL web storage, then redirects to the app
+        // Ask for location permission on Android 6+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                        LOCATION_PERMISSION_REQUEST);
+            } else {
+                locationPermissionGranted = true;
+                loadApp();
+            }
+        } else {
+            locationPermissionGranted = true;
+            loadApp();
+        }
+    }
+
+    private void loadApp() {
         String clearScript =
             "<!DOCTYPE html>" +
             "<html><body><script>" +
@@ -76,6 +104,17 @@ public class MainActivity extends AppCompatActivity {
             "</script></body></html>";
 
         webView.loadDataWithBaseURL(APP_URL, clearScript, "text/html", "UTF-8", null);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == LOCATION_PERMISSION_REQUEST) {
+            locationPermissionGranted = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            loadApp();
+        }
     }
 
     @Override
