@@ -53,6 +53,12 @@ app.use('/api/auth/signup', authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 
 const frontendPath = path.join(__dirname, '..', 'frontend');
+
+// Serve login.html at root (not index.html)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'login.html'));
+});
+
 app.use(express.static(frontendPath));
 
 app.use('/api/auth', authRoutes);
