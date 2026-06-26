@@ -1192,8 +1192,6 @@
 
         pendingTransactions = { extraMoney: [], moneyBack: [], pendingMoney: null };
         alert('All transactions saved successfully!');
-        await searchBillNumber();
-        calculateInterest();
       } catch (err) {
         alert('Error saving transactions.');
       }
